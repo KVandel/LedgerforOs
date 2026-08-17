@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Ledger — Resale Business System</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Special+Elite&family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap');
 
@@ -137,6 +140,18 @@ tbody tr:hover{ background: rgba(184,137,43,0.06); }
 .rate-item label{ font-size:10.5px; color:var(--ink-soft); text-transform:uppercase; }
 .rate-item input{ width:100%; margin-top:4px; }
 .hidden{ display:none !important; }
+.login-wrap{ max-width: 380px; margin: 90px auto; }
+.login-card{ background: var(--paper); border:1px solid var(--line); border-radius: var(--radius); padding: 30px 28px; box-shadow: 0 18px 40px -20px rgba(0,0,0,0.6); }
+.login-card h1{ font-family:'Special Elite', monospace; font-size:20px; margin:0 0 4px; }
+.login-card .sub{ font-size:12.5px; color:var(--ink-soft); margin-bottom:20px; }
+.login-card .field{ margin-bottom:12px; }
+.login-card .field input{ width:100%; }
+.login-err{ color: var(--stamp-dark); font-size:12.5px; margin-top:10px; min-height:16px; }
+.sync-pill{ font-family:'IBM Plex Mono', monospace; font-size:10.5px; letter-spacing:0.4px; padding:3px 10px; border-radius:20px; display:inline-flex; align-items:center; gap:6px; border:1px solid var(--line); color:var(--ink-soft); background:var(--paper);}
+.sync-pill .dot{ width:7px; height:7px; border-radius:50%; background:var(--ink-soft); }
+.sync-pill.on .dot{ background: var(--jade); }
+.sync-pill.err .dot{ background: var(--stamp); }
+.sync-pill.busy .dot{ background: var(--gold); }
 </style>
 </head>
 <body>
@@ -144,33 +159,101 @@ tbody tr:hover{ background: rgba(184,137,43,0.06); }
 <div class="toast" id="toast"></div>
 
 <script>
-/* ---------------- storage helpers ---------------- */
-// Uses Claude's account-linked storage when this runs inside a Claude artifact.
-// Falls back to this browser's local storage when hosted as a standalone
-// webpage (e.g. on Netlify/GitHub Pages), where window.storage doesn't exist.
-const HAS_CLOUD_STORAGE = (typeof window !== 'undefined') && !!window.storage;
+/* ---------------- firebase ---------------- */
+const firebaseConfig = {
+  apiKey: "AIzaSyCkMQAXomI2WosRseNgKuzozweso_tL8GY",
+  authDomain: "ledgerforos.firebaseapp.com",
+  projectId: "ledgerforos",
+  storageBucket: "ledgerforos.firebasestorage.app",
+  messagingSenderId: "888993672698",
+  appId: "1:888993672698:web:c963c8adb851c6b7d48843"
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+let CURRENT_UID = null;
+const LISTENERS = [];
 
+function setSyncPill(mode){
+  const el = document.getElementById('syncPill');
+  if(!el) return;
+  el.className = 'sync-pill ' + mode;
+  el.querySelector('.txt').textContent =
+    mode==='on' ? 'Synced' : mode==='busy' ? 'Syncing…' : mode==='err' ? 'Sync error' : 'Offline';
+}
+
+/* ---------------- storage helpers (Firestore-backed) ---------------- */
+function dataDoc(key){
+  return db.collection('businesses').doc(CURRENT_UID).collection('data').doc(key);
+}
 async function sGet(key, fallback){
   try{
-    if(HAS_CLOUD_STORAGE){
-      const r = await window.storage.get(key, false);
-      return r && r.value !== undefined ? JSON.parse(r.value) : fallback;
-    } else {
-      const v = localStorage.getItem('ledger_'+key);
-      return v !== null ? JSON.parse(v) : fallback;
-    }
-  } catch(e){ return fallback; }
+    const snap = await dataDoc(key).get();
+    return snap.exists && snap.data().value !== undefined ? snap.data().value : fallback;
+  }catch(e){ console.error('sGet failed', e); return fallback; }
 }
 async function sSet(key, value){
   try{
-    if(HAS_CLOUD_STORAGE){
-      await window.storage.set(key, JSON.stringify(value), false);
-    } else {
-      localStorage.setItem('ledger_'+key, JSON.stringify(value));
-    }
+    setSyncPill('busy');
+    await dataDoc(key).set({ value, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+    setSyncPill('on');
     return true;
-  } catch(e){ console.error('storage set failed', e); return false; }
+  }catch(e){ console.error('storage set failed', e); setSyncPill('err'); return false; }
 }
+function watchKey(key, applyFn){
+  const unsub = dataDoc(key).onSnapshot((snap)=>{
+    if(!snap.exists) return;
+    applyFn(snap.data().value);
+    setSyncPill('on');
+    render();
+  }, (err)=>{ console.error('listener error', key, err); setSyncPill('err'); });
+  LISTENERS.push(unsub);
+}
+function stopWatchers(){ LISTENERS.splice(0).forEach(u=>u()); }
+
+/* ---------------- auth / login screen ---------------- */
+function renderLogin(err){
+  const app = document.getElementById('app');
+  app.innerHTML = `
+    <div class="login-wrap">
+      <div class="login-card">
+        <h1>Ledger — Sign In</h1>
+        <div class="sub">Shared account for this business. Use the same email &amp; password on both devices to see the same data.</div>
+        <div class="field"><label>Email</label><input id="l_email" type="email" autocomplete="username"></div>
+        <div class="field"><label>Password</label><input id="l_pass" type="password" autocomplete="current-password"></div>
+        <div class="row"><button class="btn stamp" id="l_go" style="width:100%;">Sign In</button></div>
+        <div class="login-err">${err?escapeHtml(err):''}</div>
+      </div>
+    </div>
+  `;
+  const go = async ()=>{
+    const email = document.getElementById('l_email').value.trim();
+    const pass = document.getElementById('l_pass').value;
+    if(!email || !pass){ renderLogin('Enter both email and password.'); return; }
+    try{
+      document.getElementById('l_go').textContent = 'Signing in…';
+      await auth.signInWithEmailAndPassword(email, pass);
+    }catch(e){
+      renderLogin(e.message || 'Sign in failed.');
+    }
+  };
+  document.getElementById('l_go').addEventListener('click', go);
+  document.getElementById('l_pass').addEventListener('keydown', (e)=>{ if(e.key==='Enter') go(); });
+}
+async function logout(){
+  stopWatchers();
+  await auth.signOut();
+}
+auth.onAuthStateChanged(async (user)=>{
+  if(user){
+    CURRENT_UID = user.uid;
+    await init();
+  } else {
+    CURRENT_UID = null;
+    stopWatchers();
+    renderLogin();
+  }
+});
 
 /* ---------------- state ---------------- */
 const CURRENCIES = ['MMK','USD','THB','CNY','JPY','SGD'];
@@ -296,12 +379,19 @@ function readCostForm(prefix){
 
 /* ---------------- init ---------------- */
 async function init(){
+  document.getElementById('app').innerHTML = '<div class="loading">Opening the ledger…</div>';
   const [orders, agents, products, settings] = await Promise.all([
     sGet('orders', []), sGet('agents', []), sGet('products', []), sGet('settings', STATE.settings)
   ]);
   STATE.orders = orders; STATE.agents = agents; STATE.products = products;
   STATE.settings = Object.assign({}, STATE.settings, settings, {rates: Object.assign({}, STATE.settings.rates, (settings&&settings.rates)||{})});
   render();
+
+  stopWatchers();
+  watchKey('orders', v=>{ STATE.orders = v||[]; });
+  watchKey('agents', v=>{ STATE.agents = v||[]; });
+  watchKey('products', v=>{ STATE.products = v||[]; });
+  watchKey('settings', v=>{ STATE.settings = Object.assign({}, STATE.settings, v||{}, {rates: Object.assign({}, STATE.settings.rates, (v&&v.rates)||{})}); });
 }
 
 /* ---------------- render root ---------------- */
@@ -320,6 +410,10 @@ function render(){
         <input class="brand-input" id="bizName" value="${escapeAttr(s.businessName)}" />
         <div class="tagline">Order &amp; Cash Ledger</div>
         <div class="dateline">${new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'})} · 1 USD ≈ ${s.rates.USD.toLocaleString()} Ks</div>
+      </div>
+      <div style="position:relative; z-index:1; display:flex; flex-direction:column; align-items:flex-end; gap:8px;">
+        <div class="sync-pill on" id="syncPill"><span class="dot"></span><span class="txt">Synced</span></div>
+        <button class="btn ghost small" id="logoutBtn" type="button">Sign out</button>
       </div>
       <div class="stamp">PAID<br>&amp; SEALED<br>★ ★ ★</div>
     </div>
@@ -343,6 +437,7 @@ function render(){
     const b = e.target.closest('.tab'); if(!b) return;
     ACTIVE_TAB = b.dataset.tab; render();
   });
+  document.getElementById('logoutBtn').addEventListener('click', logout);
   renderPanel();
 }
 function tabBtn(id,label){ return `<button class="tab ${ACTIVE_TAB===id?'active':''}" data-tab="${id}">${label}</button>`; }
@@ -753,10 +848,7 @@ function renderData(panel){
     <h2>Data &amp; Backup</h2>
     <div class="sub">Export, back up, and move your ledger between devices.</div>
     <div class="info-box">
-      ${HAS_CLOUD_STORAGE
-        ? 'Storage mode: Claude account storage. This ledger is tied to your Claude account, not to one phone or browser — opening this same artifact while signed in elsewhere should show the same data.'
-        : 'Storage mode: this browser only. This copy is running as a standalone webpage, so data saves to this device/browser and will not appear on any other device automatically. Use the backup file below to move data between devices or people.'}
-      The backup file below is your manual safety net and the way to move data into Google Drive yourself.
+      This ledger now syncs live through Firebase — sign in with the same account on any device (signed in as <strong>${escapeHtml((auth.currentUser&&auth.currentUser.email)||'')}</strong>) and changes appear on both within a second or two, no refresh needed. The backup file below is still worth keeping as a periodic offline safety net, and is the way to move a snapshot into Google Drive yourself.
     </div>
     <h3 class="section">Export to Excel</h3>
     <div class="row"><button class="btn jade" id="d_excel">Download .xlsx (Orders, Products, Agents)</button></div>
@@ -821,7 +913,7 @@ function renderData(panel){
   });
 }
 
-init();
+/* auth.onAuthStateChanged (defined above) drives init() — no manual call needed */
 </script>
 </body>
 </html>
