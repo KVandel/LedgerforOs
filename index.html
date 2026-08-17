@@ -139,6 +139,11 @@ tbody tr:hover{ background: rgba(184,137,43,0.06); }
 .rate-item{ background:#fff; border:1px solid var(--line); border-radius:4px; padding:10px 12px; }
 .rate-item label{ font-size:10.5px; color:var(--ink-soft); text-transform:uppercase; }
 .rate-item input{ width:100%; margin-top:4px; }
+.rate-note{ font-size:11px; color:var(--jade-dark); margin-top:4px; font-family:'IBM Plex Mono', monospace; }
+.priced-note{ font-size:10.5px; color:var(--ink-soft); margin-top:2px; }
+.cargo-list{ display:flex; flex-direction:column; gap:6px; margin-top:8px; }
+.cargo-row{ display:flex; align-items:center; justify-content:space-between; background:#fff; border:1px solid var(--line); border-radius:4px; padding:8px 12px; font-size:12.5px; }
+.mode-toggle button:disabled{ opacity:0.4; cursor:not-allowed; }
 .hidden{ display:none !important; }
 .login-wrap{ max-width: 380px; margin: 90px auto; }
 .login-card{ background: var(--paper); border:1px solid var(--line); border-radius: var(--radius); padding: 30px 28px; box-shadow: 0 18px 40px -20px rgba(0,0,0,0.6); }
@@ -264,7 +269,9 @@ let STATE = {
   settings: {
     businessName: 'My Shop',
     rates: { MMK:1, USD:2100, THB:60, CNY:290, JPY:14, SGD:1550 },
-    marginPct: 25
+    marginPct: 25,
+    cargoRates: [],
+    lastUsed: {}
   }
 };
 let ACTIVE_TAB = 'dashboard';
@@ -303,7 +310,74 @@ function curPairHtml(prefix, amtVal, curVal){
 function readPair(prefix){
   return { amt: parseFloat(document.getElementById(prefix+'_amt').value)||0, cur: document.getElementById(prefix+'_cur').value };
 }
-// f = {unitCost:{amt,cur}, qty, intl:{amt,cur}, agentMode, agentPct, agentFlat:{amt,cur}, domestic:{amt,cur}, lastMile:{amt,cur}}
+/* ---- cargo (per-KG) rates ---- */
+function cargoRateOptions(selectedId){
+  return (STATE.settings.cargoRates||[]).map(r=>`<option value="${r.id}" ${r.id===selectedId?'selected':''}>${escapeHtml(r.name)} — ${fmt2(r.amount)} ${r.currency}/kg</option>`).join('');
+}
+/* ---- shipping leg: flat amount OR weight × saved cargo rate ---- */
+function shipLegHtml(prefix, key, label, leg){
+  leg = leg || {};
+  const mode = leg.mode || 'flat';
+  const amt = leg.amt||0, cur = leg.cur||'MMK';
+  const rates = STATE.settings.cargoRates||[];
+  return `
+    <div class="field grow">
+      <label>${label}</label>
+      <div class="mode-toggle" id="${prefix}_${key}_modeToggle">
+        <button type="button" data-mode="flat" class="${mode==='flat'?'on':''}">Flat Amount</button>
+        <button type="button" data-mode="weight" class="${mode==='weight'?'on':''}" ${rates.length?'':'disabled title="Add a cargo rate in Settings first"'}>By Weight (KG)</button>
+      </div>
+      <input type="hidden" id="${prefix}_${key}_mode" value="${mode}">
+      <div id="${prefix}_${key}_flatWrap" class="${mode==='flat'?'':'hidden'}" style="margin-top:6px;">
+        ${curPairHtml(prefix+'_'+key, amt, cur)}
+      </div>
+      <div id="${prefix}_${key}_weightWrap" class="${mode==='weight'?'':'hidden'}" style="margin-top:6px;">
+        <div class="pair">
+          <input id="${prefix}_${key}_kg" type="number" step="0.01" placeholder="Weight (kg)" value="${leg.weightKg||''}" style="width:100px;">
+          <select id="${prefix}_${key}_rateId" style="min-width:180px;">
+            <option value="">— choose rate —</option>
+            ${cargoRateOptions(leg.cargoRateId)}
+          </select>
+        </div>
+        <div class="rate-note" id="${prefix}_${key}_preview"></div>
+      </div>
+    </div>
+  `;
+}
+function wireShipLeg(prefix, key, onChange){
+  const toggle = document.getElementById(`${prefix}_${key}_modeToggle`);
+  const setMode = (mode)=>{
+    document.getElementById(`${prefix}_${key}_mode`).value = mode;
+    toggle.querySelectorAll('button').forEach(b=>b.classList.toggle('on', b.dataset.mode===mode));
+    document.getElementById(`${prefix}_${key}_flatWrap`).classList.toggle('hidden', mode!=='flat');
+    document.getElementById(`${prefix}_${key}_weightWrap`).classList.toggle('hidden', mode!=='weight');
+    if(onChange) onChange();
+  };
+  toggle.addEventListener('click', e=>{ const b=e.target.closest('button'); if(!b || b.disabled) return; setMode(b.dataset.mode); });
+  const kgInput = document.getElementById(`${prefix}_${key}_kg`);
+  const rateSel = document.getElementById(`${prefix}_${key}_rateId`);
+  const updatePreview = ()=>{
+    const rate = (STATE.settings.cargoRates||[]).find(r=>r.id===rateSel.value);
+    const kg = parseFloat(kgInput.value)||0;
+    const prev = document.getElementById(`${prefix}_${key}_preview`);
+    if(rate && kg){ prev.textContent = `= ${fmt2(kg*rate.amount)} ${rate.currency}`; } else { prev.textContent=''; }
+  };
+  kgInput.addEventListener('input', ()=>{ updatePreview(); if(onChange) onChange(); });
+  rateSel.addEventListener('change', ()=>{ updatePreview(); if(onChange) onChange(); });
+  updatePreview();
+}
+function readShipLeg(prefix, key){
+  const mode = document.getElementById(`${prefix}_${key}_mode`).value;
+  if(mode==='weight'){
+    const rateId = document.getElementById(`${prefix}_${key}_rateId`).value;
+    const rate = (STATE.settings.cargoRates||[]).find(r=>r.id===rateId);
+    const kg = parseFloat(document.getElementById(`${prefix}_${key}_kg`).value)||0;
+    return { mode:'weight', weightKg:kg, cargoRateId:rateId, amt: rate? kg*rate.amount : 0, cur: rate? rate.currency : 'MMK' };
+  }
+  const p = readPair(prefix+'_'+key);
+  return { mode:'flat', amt:p.amt, cur:p.cur, weightKg:0, cargoRateId:'' };
+}
+// f = {unitCost:{amt,cur}, qty, intl:{amt,cur,mode,weightKg,cargoRateId}, agentMode, agentPct, agentFlat:{amt,cur}, domestic:{...}, lastMile:{...}}
 function computeLanded(f){
   const itemMMK = convert(f.unitCost.amt, f.unitCost.cur) * (f.qty||1);
   const intlMMK = convert(f.intl.amt, f.intl.cur);
@@ -314,12 +388,17 @@ function computeLanded(f){
   const landed = itemMMK+intlMMK+domMMK+lastMMK+agentMMK;
   return {itemMMK, intlMMK, domMMK, lastMMK, agentMMK, landed};
 }
+// sell price for one unit, from a per-unit landed cost and the item's margin settings
+function computeSell(perUnitLanded, f){
+  if(f.marginMode==='flat') return perUnitLanded + (Number(f.marginFlatMMK)||0);
+  return perUnitLanded*(1+(Number(f.marginPct)||0)/100);
+}
 function costFormHtml(prefix, f){
   f = f || {};
-  const uc = f.unitCost||{amt:0,cur:'USD'}, intl = f.intl||{amt:0,cur:'USD'};
-  const dom = f.domestic||{amt:0,cur:'MMK'}, last = f.lastMile||{amt:0,cur:'MMK'};
+  const uc = f.unitCost||{amt:0,cur:'USD'};
   const agentFlat = f.agentFlat||{amt:0,cur:'THB'};
   const agentMode = f.agentMode || 'percent';
+  const marginMode = f.marginMode || 'percent';
   return `
     <h3 class="section">Item Cost</h3>
     <div class="row">
@@ -328,9 +407,9 @@ function costFormHtml(prefix, f){
     </div>
     <h3 class="section">Shipping Legs</h3>
     <div class="row">
-      <div class="field"><label>International (origin → Myanmar)</label>${curPairHtml(prefix+'_intl', intl.amt, intl.cur)}</div>
-      <div class="field"><label>Domestic transfer (MM warehouse → my store)</label>${curPairHtml(prefix+'_dom', dom.amt, dom.cur)}</div>
-      <div class="field"><label>Last-mile (my store → customer)</label>${curPairHtml(prefix+'_last', last.amt, last.cur)}</div>
+      ${shipLegHtml(prefix, 'intl', 'International (origin → Myanmar)', f.intl)}
+      ${shipLegHtml(prefix, 'dom', 'Domestic transfer (MM warehouse → my store)', f.domestic)}
+      ${shipLegHtml(prefix, 'last', 'Last-mile (my store → customer)', f.lastMile)}
     </div>
     <h3 class="section">Agent Fee</h3>
     <div class="row">
@@ -346,9 +425,18 @@ function costFormHtml(prefix, f){
     </div>
     <h3 class="section">Pricing</h3>
     <div class="row">
-      <div class="field"><label>Margin %</label><input id="${prefix}_margin" type="number" value="${f.marginPct!=null?f.marginPct:STATE.settings.marginPct}" style="width:90px;"></div>
+      <div class="field"><label>Margin Type</label>
+        <div class="mode-toggle" id="${prefix}_marginModeToggle">
+          <button type="button" data-mode="percent" class="${marginMode==='percent'?'on':''}">% Margin</button>
+          <button type="button" data-mode="flat" class="${marginMode==='flat'?'on':''}">+ Fixed Profit (Ks)</button>
+        </div>
+        <input type="hidden" id="${prefix}_marginMode" value="${marginMode}">
+      </div>
+      <div class="field ${marginMode==='percent'?'':'hidden'}" id="${prefix}_marginPctWrap"><label>Margin %</label><input id="${prefix}_margin" type="number" value="${f.marginPct!=null?f.marginPct:STATE.settings.marginPct}" style="width:90px;"></div>
+      <div class="field ${marginMode==='flat'?'':'hidden'}" id="${prefix}_marginFlatWrap"><label>Profit / Unit (Ks)</label><input id="${prefix}_marginFlat" type="number" value="${f.marginFlatMMK||0}" style="width:120px;"></div>
       <div class="field"><button type="button" class="btn ghost small" id="${prefix}_recalc">Recalculate →</button></div>
     </div>
+    ${f.pricedAt ? `<div class="priced-note">Last priced ${f.pricedAt} using that day's exchange rates. Recalculate uses today's rates — Save to lock them in.</div>` : ''}
   `;
 }
 function wireCostForm(prefix, onRecalc){
@@ -361,20 +449,63 @@ function wireCostForm(prefix, onRecalc){
     document.getElementById(prefix+'_agentPctWrap').classList.toggle('hidden', mode!=='percent');
     document.getElementById(prefix+'_agentFlatWrap').classList.toggle('hidden', mode!=='flat');
   });
+  const marginToggle = document.getElementById(prefix+'_marginModeToggle');
+  marginToggle.addEventListener('click', (e)=>{
+    const b = e.target.closest('button'); if(!b) return;
+    const mode = b.dataset.mode;
+    document.getElementById(prefix+'_marginMode').value = mode;
+    marginToggle.querySelectorAll('button').forEach(x=>x.classList.toggle('on', x.dataset.mode===mode));
+    document.getElementById(prefix+'_marginPctWrap').classList.toggle('hidden', mode!=='percent');
+    document.getElementById(prefix+'_marginFlatWrap').classList.toggle('hidden', mode!=='flat');
+  });
+  wireShipLeg(prefix, 'intl', onRecalc);
+  wireShipLeg(prefix, 'dom', onRecalc);
+  wireShipLeg(prefix, 'last', onRecalc);
   document.getElementById(prefix+'_recalc').addEventListener('click', onRecalc);
 }
 function readCostForm(prefix){
   return {
     unitCost: readPair(prefix+'_uc'),
     qty: parseFloat(document.getElementById(prefix+'_qty').value)||1,
-    intl: readPair(prefix+'_intl'),
-    domestic: readPair(prefix+'_dom'),
-    lastMile: readPair(prefix+'_last'),
+    intl: readShipLeg(prefix, 'intl'),
+    domestic: readShipLeg(prefix, 'dom'),
+    lastMile: readShipLeg(prefix, 'last'),
     agentMode: document.getElementById(prefix+'_agentMode').value,
     agentPct: parseFloat(document.getElementById(prefix+'_agentPct').value)||0,
     agentFlat: readPair(prefix+'_agentFlat'),
-    marginPct: parseFloat(document.getElementById(prefix+'_margin').value)||0
+    marginMode: document.getElementById(prefix+'_marginMode').value,
+    marginPct: parseFloat(document.getElementById(prefix+'_margin').value)||0,
+    marginFlatMMK: parseFloat(document.getElementById(prefix+'_marginFlat').value)||0
   };
+}
+/* ---- remember last-used choices so new items start where you left off ---- */
+function lastUsedCost(){
+  const lu = STATE.settings.lastUsed || {};
+  return {
+    unitCost:{amt:0, cur: lu.uc_cur || 'USD'},
+    qty:1,
+    intl:{mode: lu.intl_mode||'flat', amt:0, cur: lu.intl_cur||'USD', weightKg:0, cargoRateId: lu.intl_cargoRateId||''},
+    domestic:{mode: lu.dom_mode||'flat', amt:0, cur: lu.dom_cur||'MMK', weightKg:0, cargoRateId: lu.dom_cargoRateId||''},
+    lastMile:{mode: lu.last_mode||'flat', amt:0, cur: lu.last_cur||'MMK', weightKg:0, cargoRateId: lu.last_cargoRateId||''},
+    agentMode: lu.agentMode || 'percent',
+    agentPct: lu.agentPct!=null ? lu.agentPct : 0,
+    agentFlat:{amt:0, cur: lu.agentFlat_cur||'THB'},
+    marginMode: lu.marginMode || 'percent',
+    marginPct: STATE.settings.marginPct,
+    marginFlatMMK: lu.marginFlatMMK||0
+  };
+}
+function rememberLastUsed(cost, agentId){
+  const lu = Object.assign({}, STATE.settings.lastUsed||{});
+  lu.uc_cur = cost.unitCost.cur;
+  lu.intl_mode = cost.intl.mode; lu.intl_cur = cost.intl.cur; lu.intl_cargoRateId = cost.intl.cargoRateId;
+  lu.dom_mode = cost.domestic.mode; lu.dom_cur = cost.domestic.cur; lu.dom_cargoRateId = cost.domestic.cargoRateId;
+  lu.last_mode = cost.lastMile.mode; lu.last_cur = cost.lastMile.cur; lu.last_cargoRateId = cost.lastMile.cargoRateId;
+  lu.agentMode = cost.agentMode; lu.agentPct = cost.agentPct; lu.agentFlat_cur = cost.agentFlat.cur;
+  lu.marginMode = cost.marginMode; lu.marginFlatMMK = cost.marginFlatMMK;
+  if(agentId!=null && agentId!=='') lu.agentId = agentId;
+  STATE.settings.lastUsed = lu;
+  sSet('settings', STATE.settings);
 }
 
 /* ---------------- init ---------------- */
@@ -490,8 +621,8 @@ function renderDashboard(panel){
 function blankOrder(){
   return { id: uid(), mode:'catalog', productId:'', customer:'', phone:'', product:'', qty:1,
     snapLandedMMK:0, snapSellMMK:0,
-    cost:{unitCost:{amt:0,cur:'USD'}, qty:1, intl:{amt:0,cur:'USD'}, domestic:{amt:0,cur:'MMK'}, lastMile:{amt:0,cur:'MMK'}, agentMode:'percent', agentPct:0, agentFlat:{amt:0,cur:'THB'}, marginPct: STATE.settings.marginPct},
-    sellPriceMMK:0, depositMMK:0, status:'deposit', agentId:'', orderDate: new Date().toISOString().slice(0,10), notes:'' };
+    cost: lastUsedCost(),
+    sellPriceMMK:0, depositMMK:0, status:'deposit', agentId: (STATE.settings.lastUsed||{}).agentId||'', orderDate: new Date().toISOString().slice(0,10), notes:'' };
 }
 function renderOrders(panel){
   panel.innerHTML = `
@@ -591,7 +722,8 @@ function showOrderForm(o){
   if(o.mode==='custom' || !STATE.products.length){
     wireCostForm('ordc', ()=>{
       const f = readCostForm('ordc'); const r = computeLanded(f);
-      document.getElementById('ordc_sell').value = Math.round(r.landed*(1+f.marginPct/100));
+      const perUnit = r.landed/(f.qty||1);
+      document.getElementById('ordc_sell').value = Math.round(computeSell(perUnit, f)*(f.qty||1));
     });
   }
 
@@ -618,10 +750,13 @@ function showOrderForm(o){
       const name = document.getElementById('f_productName').value.trim();
       if(!name){ toast('Item name required'); return; }
       const cost = readCostForm('ordc');
+      cost.ratesSnapshot = Object.assign({}, STATE.settings.rates);
+      cost.pricedAt = new Date().toISOString().slice(0,10);
       const sell = parseFloat(document.getElementById('ordc_sell').value)||0;
       updated = Object.assign({}, base, { productId:'', product:name, cost, sellPriceMMK: sell, snapLandedMMK:0, snapSellMMK:0 });
     }
     if(!updated.customer){ toast('Customer name required'); return; }
+    rememberLastUsed(updated.cost, updated.agentId);
     const idx = STATE.orders.findIndex(x=>x.id===o.id);
     if(idx>=0) STATE.orders[idx]=updated; else STATE.orders.push(updated);
     await sSet('orders', STATE.orders); toast('Order saved'); holder.innerHTML='';
@@ -632,7 +767,7 @@ function showOrderForm(o){
 /* ---------------- products ---------------- */
 function blankProduct(){
   return { id:uid(), code:'', name:'', category:'', notes:'',
-    cost:{unitCost:{amt:0,cur:'USD'}, qty:1, intl:{amt:0,cur:'USD'}, domestic:{amt:0,cur:'MMK'}, lastMile:{amt:0,cur:'MMK'}, agentMode:'percent', agentPct:0, agentFlat:{amt:0,cur:'THB'}, marginPct: STATE.settings.marginPct},
+    cost: lastUsedCost(),
     landedCostMMK:0, sellPriceMMK:0 };
 }
 function renderProducts(panel){
@@ -648,16 +783,19 @@ function renderProducts(panel){
           <td class="mono">${escapeHtml(p.code)||'—'}</td>
           <td>${escapeHtml(p.name)}</td>
           <td class="muted">${escapeHtml(p.category)||'—'}</td>
-          <td class="mono">${fmtMMK(p.landedCostMMK)}</td>
+          <td class="mono">${fmtMMK(p.landedCostMMK)}${p.cost&&p.cost.pricedAt?`<div class="priced-note">as of ${p.cost.pricedAt}</div>`:''}</td>
           <td class="mono">${fmtMMK(p.sellPriceMMK)}</td>
           <td class="muted">${escapeHtml(p.notes)||''}</td>
-          <td><button class="icon-btn edit-prod" title="Edit">✎</button><button class="icon-btn del-prod" title="Delete">✕</button></td>
+          <td><button class="icon-btn refresh-prod" title="Reprice with today's exchange rate">↻</button><button class="icon-btn edit-prod" title="Edit">✎</button><button class="icon-btn del-prod" title="Delete">✕</button></td>
         </tr>`).join('')}</tbody></table>
     ` : `<div class="card-empty">No products saved yet.</div>`}
   `;
   document.getElementById('newProdBtn').addEventListener('click', ()=> showProductForm(blankProduct()));
   document.querySelectorAll('.edit-prod').forEach(btn=>{
     btn.addEventListener('click', e=>{ const id=e.target.closest('tr').dataset.id; const p=STATE.products.find(x=>x.id===id); if(p) showProductForm(p); });
+  });
+  document.querySelectorAll('.refresh-prod').forEach(btn=>{
+    btn.addEventListener('click', e=>{ const id=e.target.closest('tr').dataset.id; refreshProductRate(id); });
   });
   document.querySelectorAll('.del-prod').forEach(btn=>{
     btn.addEventListener('click', async e=>{
@@ -687,7 +825,7 @@ function showProductForm(p){
   wireCostForm('pc', ()=>{
     const f = readCostForm('pc'); const r = computeLanded(f);
     const perUnit = r.landed/(f.qty||1);
-    document.getElementById('pc_sell').value = Math.round(perUnit*(1+f.marginPct/100));
+    document.getElementById('pc_sell').value = Math.round(computeSell(perUnit, f));
   });
   document.getElementById('p_cancel').addEventListener('click', ()=> holder.innerHTML='');
   document.getElementById('p_save').addEventListener('click', async ()=>{
@@ -696,16 +834,31 @@ function showProductForm(p){
     const cost = readCostForm('pc');
     const r = computeLanded(cost);
     const perUnitLanded = r.landed/(cost.qty||1);
+    cost.ratesSnapshot = Object.assign({}, STATE.settings.rates);
+    cost.pricedAt = new Date().toISOString().slice(0,10);
     const updated = {
       id:p.id, code: document.getElementById('p_code').value.trim(), name, category: document.getElementById('p_category').value.trim(),
       notes: document.getElementById('p_notes').value.trim(), cost,
       landedCostMMK: perUnitLanded, sellPriceMMK: parseFloat(document.getElementById('pc_sell').value)||0
     };
+    rememberLastUsed(cost, null);
     const idx = STATE.products.findIndex(x=>x.id===p.id);
     if(idx>=0) STATE.products[idx]=updated; else STATE.products.push(updated);
     await sSet('products', STATE.products); toast('Product saved to catalog'); holder.innerHTML='';
     renderProducts(document.getElementById('panel'));
   });
+}
+async function refreshProductRate(id){
+  const p = STATE.products.find(x=>x.id===id); if(!p) return;
+  const r = computeLanded(p.cost);
+  const perUnitLanded = r.landed/(p.cost.qty||1);
+  const sell = computeSell(perUnitLanded, p.cost);
+  p.landedCostMMK = perUnitLanded;
+  p.sellPriceMMK = sell;
+  p.cost = Object.assign({}, p.cost, { ratesSnapshot: Object.assign({}, STATE.settings.rates), pricedAt: new Date().toISOString().slice(0,10) });
+  await sSet('products', STATE.products);
+  toast('Repriced with today\'s exchange rate');
+  renderProducts(document.getElementById('panel'));
 }
 
 /* ---------------- pricing calculator (scratchpad) ---------------- */
@@ -734,7 +887,7 @@ function renderPricing(panel){
   const calc = ()=>{
     const f = readCostForm('calc'); const r = computeLanded(f);
     const perUnitLanded = r.landed/(f.qty||1);
-    const price = perUnitLanded*(1+f.marginPct/100);
+    const price = computeSell(perUnitLanded, f);
     document.getElementById('calc_result').innerHTML = `
       <div class="line"><span>Item Cost</span><span class="v">${fmtMMK(r.itemMMK)}</span></div>
       <div class="line"><span>International Shipping</span><span class="v">${fmtMMK(r.intlMMK)}</span></div>
@@ -753,9 +906,12 @@ function renderPricing(panel){
     const name = document.getElementById('calc_name').value.trim();
     if(!name){ toast('Give the product a name first'); return; }
     const f = readCostForm('calc'); const res = calc();
+    f.ratesSnapshot = Object.assign({}, STATE.settings.rates);
+    f.pricedAt = new Date().toISOString().slice(0,10);
     const product = { id:uid(), code: document.getElementById('calc_code').value.trim(), name, category:'', notes:'',
       cost:f, landedCostMMK: res.perUnitLanded, sellPriceMMK: res.price };
     STATE.products.push(product);
+    rememberLastUsed(f, null);
     await sSet('products', STATE.products);
     toast('Saved to Products — find it under the Products tab');
   });
@@ -826,19 +982,52 @@ function renderSettings(panel){
     <div class="row"><div class="field"><label>Business Name</label><input id="s_name" value="${escapeAttr(s.businessName)}"></div>
     <div class="field"><label>Default Margin %</label><input id="s_margin" type="number" value="${s.marginPct}" style="width:100px;"></div></div>
     <h3 class="section">Exchange Rates (1 unit = ? MMK)</h3>
+    <div class="sub" style="margin-top:-6px;">Change these any time — new orders and products price off whatever is here today. Existing items keep the rate they were priced at until you reprice them.</div>
     <div class="rate-grid">
       ${CURRENCIES.filter(c=>c!=='MMK').map(c=>`
         <div class="rate-item"><label>${CUR_LABEL[c]}</label><input id="rate_${c}" type="number" value="${s.rates[c]}"></div>
       `).join('')}
+    </div>
+    <h3 class="section">Cargo Rates (per KG)</h3>
+    <div class="sub" style="margin-top:-6px;">Save known shipping rates (e.g. Thailand → MM Air Cargo, 350 THB/kg) so you can price a shipping leg by weight instead of calculating it every time.</div>
+    <div class="cargo-list" id="cargoRatesList">
+      ${(s.cargoRates||[]).length ? s.cargoRates.map(r=>`
+        <div class="cargo-row" data-id="${r.id}">
+          <span>${escapeHtml(r.name)} — <span class="mono">${fmt2(r.amount)} ${r.currency}</span> / kg</span>
+          <button type="button" class="icon-btn del-cargo" title="Delete">✕</button>
+        </div>
+      `).join('') : '<div class="muted">No cargo rates saved yet.</div>'}
+    </div>
+    <div class="row" style="margin-top:10px;">
+      <div class="field grow"><label>Rate Name</label><input id="cr_name" placeholder="e.g. Thailand Air Cargo"></div>
+      <div class="field"><label>Amount</label><input id="cr_amt" type="number" step="0.01" style="width:100px;"></div>
+      <div class="field"><label>Currency</label><select id="cr_cur">${CURRENCIES.map(c=>`<option value="${c}">${c}</option>`).join('')}</select></div>
+      <div class="field"><button type="button" class="btn jade small" id="cr_add">+ Add Rate</button></div>
     </div>
     <div class="row" style="margin-top:16px;"><button class="btn stamp" id="s_save">Save Settings</button></div>
   `;
   document.getElementById('s_save').addEventListener('click', async ()=>{
     const rates = {MMK:1};
     CURRENCIES.filter(c=>c!=='MMK').forEach(c=>{ rates[c] = parseFloat(document.getElementById('rate_'+c).value)||STATE.settings.rates[c]; });
-    STATE.settings = { businessName: document.getElementById('s_name').value.trim()||'My Shop',
-      marginPct: parseFloat(document.getElementById('s_margin').value)||25, rates };
+    STATE.settings = Object.assign({}, STATE.settings, { businessName: document.getElementById('s_name').value.trim()||'My Shop',
+      marginPct: parseFloat(document.getElementById('s_margin').value)||25, rates });
     await sSet('settings', STATE.settings); toast('Settings saved'); render();
+  });
+  document.getElementById('cr_add').addEventListener('click', async ()=>{
+    const name = document.getElementById('cr_name').value.trim();
+    const amount = parseFloat(document.getElementById('cr_amt').value)||0;
+    const currency = document.getElementById('cr_cur').value;
+    if(!name || !amount){ toast('Give the rate a name and amount'); return; }
+    STATE.settings.cargoRates = (STATE.settings.cargoRates||[]).concat([{ id:uid(), name, amount, currency }]);
+    await sSet('settings', STATE.settings); toast('Cargo rate saved'); renderSettings(document.getElementById('panel'));
+  });
+  document.querySelectorAll('.del-cargo').forEach(btn=>{
+    btn.addEventListener('click', async (e)=>{
+      const id = e.target.closest('.cargo-row').dataset.id;
+      if(!confirm('Delete this cargo rate?')) return;
+      STATE.settings.cargoRates = (STATE.settings.cargoRates||[]).filter(r=>r.id!==id);
+      await sSet('settings', STATE.settings); toast('Cargo rate deleted'); renderSettings(document.getElementById('panel'));
+    });
   });
 }
 
@@ -897,7 +1086,7 @@ function renderData(panel){
         const data = JSON.parse(ev.target.result);
         if(!confirm('This will replace all current data with the backup file. Continue?')) return;
         STATE.orders = data.orders||[]; STATE.agents = data.agents||[]; STATE.products = data.products||[];
-        STATE.settings = Object.assign({businessName:'My Shop', marginPct:25, rates:{MMK:1,USD:2100,THB:60,CNY:290,JPY:14,SGD:1550}}, data.settings||{});
+        STATE.settings = Object.assign({businessName:'My Shop', marginPct:25, rates:{MMK:1,USD:2100,THB:60,CNY:290,JPY:14,SGD:1550}, cargoRates:[], lastUsed:{}}, data.settings||{});
         await Promise.all([sSet('orders',STATE.orders), sSet('agents',STATE.agents), sSet('products',STATE.products), sSet('settings',STATE.settings)]);
         toast('Backup restored'); render();
       }catch(err){ console.error(err); toast('Could not read that file'); }
@@ -907,7 +1096,7 @@ function renderData(panel){
   document.getElementById('d_reset').addEventListener('click', async ()=>{
     if(!confirm('This deletes every order, product, and agent stored in this ledger. Continue?')) return;
     STATE.orders=[]; STATE.agents=[]; STATE.products=[];
-    STATE.settings = {businessName:'My Shop', marginPct:25, rates:{MMK:1,USD:2100,THB:60,CNY:290,JPY:14,SGD:1550}};
+    STATE.settings = {businessName:'My Shop', marginPct:25, rates:{MMK:1,USD:2100,THB:60,CNY:290,JPY:14,SGD:1550}, cargoRates:[], lastUsed:{}};
     await Promise.all([sSet('orders',[]), sSet('agents',[]), sSet('products',[]), sSet('settings', STATE.settings)]);
     toast('All data reset'); render();
   });
