@@ -1,0 +1,827 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ledger — Resale Business System</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Special+Elite&family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap');
+
+:root{
+  --shell:#1B222C;
+  --paper:#F7F2E4;
+  --paper-2:#EFE8D4;
+  --ink:#262019;
+  --ink-soft:#6b6152;
+  --line: rgba(38,32,25,0.14);
+  --stamp:#A5311F;
+  --stamp-dark:#7c2416;
+  --jade:#2F6B5E;
+  --jade-dark:#204c43;
+  --gold:#B8892B;
+  --danger:#A5311F;
+  --radius: 6px;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;}
+body{
+  background: var(--shell);
+  background-image:
+    radial-gradient(circle at 15% 0%, rgba(184,137,43,0.08), transparent 40%),
+    radial-gradient(circle at 90% 100%, rgba(47,107,94,0.10), transparent 45%);
+  color: var(--ink);
+  font-family: 'Inter', sans-serif;
+  min-height: 100vh;
+  padding: 28px 16px 60px;
+}
+.wrap{ max-width: 1150px; margin: 0 auto; }
+.letterhead{
+  background: var(--paper); border-radius: var(--radius); border: 1px solid var(--line);
+  padding: 22px 26px; display:flex; align-items:center; justify-content:space-between; gap: 20px;
+  box-shadow: 0 18px 40px -20px rgba(0,0,0,0.6); position:relative; overflow:hidden;
+}
+.letterhead::before{
+  content:""; position:absolute; inset:0;
+  background-image: repeating-linear-gradient(to bottom, transparent 0 27px, var(--line) 27px 28px);
+  opacity:0.5; pointer-events:none;
+}
+.brandrow{ position:relative; z-index:1; }
+.brand-input{
+  font-family:'Special Elite', monospace; font-size: 26px; letter-spacing: 0.5px;
+  background:transparent; border:none; color: var(--ink); border-bottom: 1px dashed transparent;
+  padding: 2px 0; max-width: 420px;
+}
+.brand-input:focus{ outline:none; border-bottom-color: var(--stamp); }
+.tagline{ font-size:12.5px; color: var(--ink-soft); margin-top:4px; text-transform:uppercase; letter-spacing:1.4px; }
+.dateline{ font-family:'IBM Plex Mono', monospace; font-size:12px; color: var(--ink-soft); margin-top:2px; }
+.stamp{
+  position:relative; z-index:1; width: 78px; height: 78px; flex:0 0 auto;
+  border: 3px solid var(--stamp); border-radius: 50%; display:flex; align-items:center; justify-content:center;
+  transform: rotate(-9deg); color: var(--stamp); font-family:'Special Elite', monospace; text-align:center;
+  font-size: 10.5px; line-height:1.25; letter-spacing:0.5px; opacity: 0.88; box-shadow: inset 0 0 0 1px var(--stamp);
+}
+.stats{ display:grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 14px; }
+.stat{ background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; }
+.stat .label{ font-size:11px; text-transform:uppercase; letter-spacing:1px; color: var(--ink-soft); margin-bottom:6px;}
+.stat .value{ font-family:'IBM Plex Mono', monospace; font-size:19px; font-weight:600; color: var(--ink);}
+.stat.accent-jade .value{ color: var(--jade-dark); }
+.stat.accent-gold .value{ color: #8a6821; }
+.stat.accent-stamp .value{ color: var(--stamp-dark); }
+.tabs{ display:flex; gap:4px; margin-top:22px; flex-wrap:wrap; border-bottom: 2px solid rgba(247,242,228,0.15); }
+.tab{
+  font-family:'Special Elite', monospace; font-size: 12.5px; letter-spacing:0.4px; background: transparent;
+  color: rgba(247,242,228,0.55); border:none; padding: 10px 15px; cursor:pointer; border-bottom: 2px solid transparent;
+  margin-bottom:-2px; transition: color .15s ease;
+}
+.tab:hover{ color: rgba(247,242,228,0.85); }
+.tab.active{ color: #F7F2E4; border-bottom-color: var(--stamp); }
+.panel{ background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius); padding: 22px 24px 26px; min-height: 320px; }
+.panel h2{ font-family:'Special Elite', monospace; font-size:16px; margin:0 0 4px; }
+.panel .sub{ font-size:12.5px; color:var(--ink-soft); margin-bottom:18px;}
+h3.section{ font-size:12px; text-transform:uppercase; letter-spacing:0.8px; color:var(--ink-soft); margin:18px 0 8px; border-top:1px dashed var(--line); padding-top:14px;}
+h3.section:first-of-type{ border-top:none; padding-top:0; margin-top:6px; }
+button{ font-family:'Inter',sans-serif; cursor:pointer; }
+.btn{ background: var(--ink); color: var(--paper); border:none; border-radius:4px; padding: 9px 16px; font-size:13px; font-weight:600; letter-spacing:0.2px; }
+.btn:hover{ opacity:0.88; }
+.btn.ghost{ background:transparent; color:var(--ink); border:1px solid var(--line); }
+.btn.stamp{ background: var(--stamp); color:#fff; }
+.btn.jade{ background: var(--jade); color:#fff; }
+.btn.small{ padding:5px 10px; font-size:11.5px; border-radius:3px; }
+.btn.danger{ background:transparent; color: var(--danger); border:1px solid rgba(165,49,31,0.4); }
+.row{ display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; }
+.field{ display:flex; flex-direction:column; gap:4px; }
+.field label{ font-size:11px; text-transform:uppercase; letter-spacing:0.6px; color:var(--ink-soft); }
+.field input, .field select, .field textarea{
+  font-family:'IBM Plex Mono', monospace; font-size:13px; padding: 8px 10px; border:1px solid var(--line);
+  border-radius:4px; background:#fff; color: var(--ink); min-width: 110px;
+}
+.field textarea{ font-family:'Inter',sans-serif; min-width:220px; }
+.field.grow{ flex:1; min-width:200px; }
+.pair{ display:flex; gap:6px; }
+.pair input{ width:100px; }
+.pair select{ min-width:74px; }
+.mode-toggle{ display:flex; gap:0; border:1px solid var(--line); border-radius:4px; overflow:hidden; }
+.mode-toggle button{ border:none; background:#fff; padding:8px 14px; font-size:12px; color:var(--ink-soft); }
+.mode-toggle button.on{ background:var(--ink); color:var(--paper); }
+table{ width:100%; border-collapse:collapse; margin-top:16px; font-size:12.5px; }
+thead th{ text-align:left; font-size:10.5px; text-transform:uppercase; letter-spacing:0.6px; color: var(--ink-soft); border-bottom:1px solid var(--line); padding: 6px 8px; }
+tbody td{ padding: 10px 8px; border-bottom:1px dashed var(--line); vertical-align:top; }
+tbody tr:hover{ background: rgba(184,137,43,0.06); }
+.mono{ font-family:'IBM Plex Mono', monospace; }
+.muted{ color:var(--ink-soft); font-size:12px; }
+.badge{ display:inline-block; padding:3px 9px; border-radius:20px; font-size:10.5px; font-weight:600; letter-spacing:0.3px; text-transform:uppercase; border:1px solid transparent; }
+.badge.st-deposit{ background:rgba(165,49,31,0.10); color:var(--stamp-dark); border-color:rgba(165,49,31,0.25);}
+.badge.st-ordered{ background:rgba(184,137,43,0.14); color:#7d5f1d; border-color:rgba(184,137,43,0.3);}
+.badge.st-transit{ background:rgba(184,137,43,0.14); color:#7d5f1d; border-color:rgba(184,137,43,0.3);}
+.badge.st-arrived{ background:rgba(47,107,94,0.10); color:var(--jade-dark); border-color:rgba(47,107,94,0.25);}
+.badge.st-delivered{ background:rgba(47,107,94,0.18); color:var(--jade-dark); border-color:rgba(47,107,94,0.35);}
+.badge.st-cancelled{ background:rgba(38,32,25,0.08); color:var(--ink-soft); border-color:var(--line);}
+.card-empty{ padding: 34px 10px; text-align:center; color:var(--ink-soft); font-size:13px; border: 1px dashed var(--line); border-radius:var(--radius); margin-top:14px; }
+.calc-grid{ display:grid; grid-template-columns: 1.3fr 1fr; gap:26px; margin-top:10px; }
+@media (max-width: 760px){ .calc-grid{ grid-template-columns:1fr; } .stats{ grid-template-columns: 1fr 1fr; } }
+.result{ background: var(--paper-2); border:1px solid var(--line); border-radius: var(--radius); padding: 18px 20px; position:sticky; top:16px; }
+.result .line{ display:flex; justify-content:space-between; padding:7px 0; border-bottom:1px dashed var(--line); font-size:12.5px;}
+.result .line:last-child{ border-bottom:none; }
+.result .line.total{ font-weight:700; font-size:15px; padding-top:12px; }
+.result .line .v{ font-family:'IBM Plex Mono', monospace; }
+.toast{ position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background: var(--ink); color:var(--paper);
+  padding:10px 18px; border-radius:5px; font-size:13px; opacity:0; pointer-events:none; transition: opacity .25s ease, transform .25s ease; z-index: 50; }
+.toast.show{ opacity:1; transform:translateX(-50%) translateY(-4px); }
+.icon-btn{ background:none; border:none; color:var(--ink-soft); font-size:14px; padding:2px 4px; }
+.icon-btn:hover{ color: var(--stamp); }
+.loading{ color: rgba(247,242,228,0.7); text-align:center; padding: 40px; font-family:'IBM Plex Mono', monospace; font-size:13px;}
+.info-box{ background:rgba(47,107,94,0.08); border:1px solid rgba(47,107,94,0.25); border-radius:var(--radius); padding:14px 16px; font-size:12.5px; color:var(--jade-dark); margin-bottom:16px; }
+.rate-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:12px; margin-top:8px; }
+.rate-item{ background:#fff; border:1px solid var(--line); border-radius:4px; padding:10px 12px; }
+.rate-item label{ font-size:10.5px; color:var(--ink-soft); text-transform:uppercase; }
+.rate-item input{ width:100%; margin-top:4px; }
+.hidden{ display:none !important; }
+</style>
+</head>
+<body>
+<div class="wrap" id="app"><div class="loading">Opening the ledger…</div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ---------------- storage helpers ---------------- */
+// Uses Claude's account-linked storage when this runs inside a Claude artifact.
+// Falls back to this browser's local storage when hosted as a standalone
+// webpage (e.g. on Netlify/GitHub Pages), where window.storage doesn't exist.
+const HAS_CLOUD_STORAGE = (typeof window !== 'undefined') && !!window.storage;
+
+async function sGet(key, fallback){
+  try{
+    if(HAS_CLOUD_STORAGE){
+      const r = await window.storage.get(key, false);
+      return r && r.value !== undefined ? JSON.parse(r.value) : fallback;
+    } else {
+      const v = localStorage.getItem('ledger_'+key);
+      return v !== null ? JSON.parse(v) : fallback;
+    }
+  } catch(e){ return fallback; }
+}
+async function sSet(key, value){
+  try{
+    if(HAS_CLOUD_STORAGE){
+      await window.storage.set(key, JSON.stringify(value), false);
+    } else {
+      localStorage.setItem('ledger_'+key, JSON.stringify(value));
+    }
+    return true;
+  } catch(e){ console.error('storage set failed', e); return false; }
+}
+
+/* ---------------- state ---------------- */
+const CURRENCIES = ['MMK','USD','THB','CNY','JPY','SGD'];
+const CUR_LABEL = {MMK:'MMK (Kyat)', USD:'USD (US$)', THB:'THB (Baht)', CNY:'CNY (Yuan)', JPY:'JPY (Yen)', SGD:'SGD (S$)'};
+
+let STATE = {
+  orders: [], agents: [], products: [],
+  settings: {
+    businessName: 'My Shop',
+    rates: { MMK:1, USD:2100, THB:60, CNY:290, JPY:14, SGD:1550 },
+    marginPct: 25
+  }
+};
+let ACTIVE_TAB = 'dashboard';
+const uid = () => Math.random().toString(36).slice(2,10);
+
+function fmtMMK(n){ n = Math.round(n||0); return n.toLocaleString('en-US') + ' Ks'; }
+function fmt2(n){ return (n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function toast(msg){
+  const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toast._h); toast._h = setTimeout(()=> t.classList.remove('show'), 2400);
+}
+function escapeAttr(str){ return String(str||'').replace(/"/g,'&quot;'); }
+function escapeHtml(str){ return String(str||'').replace(/[&<>]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+
+const STATUS_OPTS = [
+  {v:'deposit', label:'Awaiting Deposit', cls:'st-deposit'},
+  {v:'ordered', label:'Ordered w/ Agent', cls:'st-ordered'},
+  {v:'transit', label:'In Transit', cls:'st-transit'},
+  {v:'arrived', label:'Arrived in MM', cls:'st-arrived'},
+  {v:'delivered', label:'Delivered & Paid', cls:'st-delivered'},
+  {v:'cancelled', label:'Cancelled', cls:'st-cancelled'},
+];
+function statusMeta(v){ return STATUS_OPTS.find(s=>s.v===v) || STATUS_OPTS[0]; }
+
+/* ---------------- currency + cost engine ---------------- */
+function convert(amount, currency){
+  const rate = STATE.settings.rates[currency];
+  return (Number(amount)||0) * (rate!=null?rate:1);
+}
+function curPairHtml(prefix, amtVal, curVal){
+  return `<div class="pair">
+    <input id="${prefix}_amt" type="number" step="0.01" value="${amtVal||0}">
+    <select id="${prefix}_cur">${CURRENCIES.map(c=>`<option value="${c}" ${c===curVal?'selected':''}>${c}</option>`).join('')}</select>
+  </div>`;
+}
+function readPair(prefix){
+  return { amt: parseFloat(document.getElementById(prefix+'_amt').value)||0, cur: document.getElementById(prefix+'_cur').value };
+}
+// f = {unitCost:{amt,cur}, qty, intl:{amt,cur}, agentMode, agentPct, agentFlat:{amt,cur}, domestic:{amt,cur}, lastMile:{amt,cur}}
+function computeLanded(f){
+  const itemMMK = convert(f.unitCost.amt, f.unitCost.cur) * (f.qty||1);
+  const intlMMK = convert(f.intl.amt, f.intl.cur);
+  const domMMK = convert(f.domestic.amt, f.domestic.cur);
+  const lastMMK = convert(f.lastMile.amt, f.lastMile.cur);
+  const feeBase = itemMMK + intlMMK;
+  const agentMMK = f.agentMode==='flat' ? convert(f.agentFlat.amt, f.agentFlat.cur) : feeBase*(Number(f.agentPct)||0)/100;
+  const landed = itemMMK+intlMMK+domMMK+lastMMK+agentMMK;
+  return {itemMMK, intlMMK, domMMK, lastMMK, agentMMK, landed};
+}
+function costFormHtml(prefix, f){
+  f = f || {};
+  const uc = f.unitCost||{amt:0,cur:'USD'}, intl = f.intl||{amt:0,cur:'USD'};
+  const dom = f.domestic||{amt:0,cur:'MMK'}, last = f.lastMile||{amt:0,cur:'MMK'};
+  const agentFlat = f.agentFlat||{amt:0,cur:'THB'};
+  const agentMode = f.agentMode || 'percent';
+  return `
+    <h3 class="section">Item Cost</h3>
+    <div class="row">
+      <div class="field"><label>Unit Cost</label>${curPairHtml(prefix+'_uc', uc.amt, uc.cur)}</div>
+      <div class="field"><label>Qty</label><input id="${prefix}_qty" type="number" min="1" value="${f.qty||1}" style="width:80px;"></div>
+    </div>
+    <h3 class="section">Shipping Legs</h3>
+    <div class="row">
+      <div class="field"><label>International (origin → Myanmar)</label>${curPairHtml(prefix+'_intl', intl.amt, intl.cur)}</div>
+      <div class="field"><label>Domestic transfer (MM warehouse → my store)</label>${curPairHtml(prefix+'_dom', dom.amt, dom.cur)}</div>
+      <div class="field"><label>Last-mile (my store → customer)</label>${curPairHtml(prefix+'_last', last.amt, last.cur)}</div>
+    </div>
+    <h3 class="section">Agent Fee</h3>
+    <div class="row">
+      <div class="field"><label>Fee Type</label>
+        <div class="mode-toggle" id="${prefix}_agentModeToggle">
+          <button type="button" data-mode="percent" class="${agentMode==='percent'?'on':''}">% of cost</button>
+          <button type="button" data-mode="flat" class="${agentMode==='flat'?'on':''}">Flat fee</button>
+        </div>
+        <input type="hidden" id="${prefix}_agentMode" value="${agentMode}">
+      </div>
+      <div class="field ${agentMode==='percent'?'':'hidden'}" id="${prefix}_agentPctWrap"><label>Agent Fee %</label><input id="${prefix}_agentPct" type="number" step="0.1" value="${f.agentPct||0}" style="width:90px;"></div>
+      <div class="field ${agentMode==='flat'?'':'hidden'}" id="${prefix}_agentFlatWrap"><label>Flat Fee</label>${curPairHtml(prefix+'_agentFlat', agentFlat.amt, agentFlat.cur)}</div>
+    </div>
+    <h3 class="section">Pricing</h3>
+    <div class="row">
+      <div class="field"><label>Margin %</label><input id="${prefix}_margin" type="number" value="${f.marginPct!=null?f.marginPct:STATE.settings.marginPct}" style="width:90px;"></div>
+      <div class="field"><button type="button" class="btn ghost small" id="${prefix}_recalc">Recalculate →</button></div>
+    </div>
+  `;
+}
+function wireCostForm(prefix, onRecalc){
+  const toggle = document.getElementById(prefix+'_agentModeToggle');
+  toggle.addEventListener('click', (e)=>{
+    const b = e.target.closest('button'); if(!b) return;
+    const mode = b.dataset.mode;
+    document.getElementById(prefix+'_agentMode').value = mode;
+    toggle.querySelectorAll('button').forEach(x=>x.classList.toggle('on', x.dataset.mode===mode));
+    document.getElementById(prefix+'_agentPctWrap').classList.toggle('hidden', mode!=='percent');
+    document.getElementById(prefix+'_agentFlatWrap').classList.toggle('hidden', mode!=='flat');
+  });
+  document.getElementById(prefix+'_recalc').addEventListener('click', onRecalc);
+}
+function readCostForm(prefix){
+  return {
+    unitCost: readPair(prefix+'_uc'),
+    qty: parseFloat(document.getElementById(prefix+'_qty').value)||1,
+    intl: readPair(prefix+'_intl'),
+    domestic: readPair(prefix+'_dom'),
+    lastMile: readPair(prefix+'_last'),
+    agentMode: document.getElementById(prefix+'_agentMode').value,
+    agentPct: parseFloat(document.getElementById(prefix+'_agentPct').value)||0,
+    agentFlat: readPair(prefix+'_agentFlat'),
+    marginPct: parseFloat(document.getElementById(prefix+'_margin').value)||0
+  };
+}
+
+/* ---------------- init ---------------- */
+async function init(){
+  const [orders, agents, products, settings] = await Promise.all([
+    sGet('orders', []), sGet('agents', []), sGet('products', []), sGet('settings', STATE.settings)
+  ]);
+  STATE.orders = orders; STATE.agents = agents; STATE.products = products;
+  STATE.settings = Object.assign({}, STATE.settings, settings, {rates: Object.assign({}, STATE.settings.rates, (settings&&settings.rates)||{})});
+  render();
+}
+
+/* ---------------- render root ---------------- */
+function render(){
+  const app = document.getElementById('app');
+  const s = STATE.settings;
+  const active = STATE.orders.filter(o=>o.status!=='cancelled');
+  const depositsCollected = active.reduce((a,o)=>a+Number(o.depositMMK||0),0);
+  const balanceOwed = active.filter(o=>o.status!=='delivered').reduce((a,o)=>a+Math.max(0,orderSellMMK(o)-Number(o.depositMMK||0)),0);
+  const landedCommitted = active.filter(o=>o.status!=='delivered').reduce((a,o)=>a+orderLandedMMK(o),0);
+  const estProfit = active.reduce((a,o)=>a+(orderSellMMK(o)-orderLandedMMK(o)),0);
+
+  app.innerHTML = `
+    <div class="letterhead">
+      <div class="brandrow">
+        <input class="brand-input" id="bizName" value="${escapeAttr(s.businessName)}" />
+        <div class="tagline">Order &amp; Cash Ledger</div>
+        <div class="dateline">${new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'})} · 1 USD ≈ ${s.rates.USD.toLocaleString()} Ks</div>
+      </div>
+      <div class="stamp">PAID<br>&amp; SEALED<br>★ ★ ★</div>
+    </div>
+    <div class="stats">
+      <div class="stat accent-jade"><div class="label">Deposits Collected</div><div class="value">${fmtMMK(depositsCollected)}</div></div>
+      <div class="stat accent-gold"><div class="label">Balance Owed by Customers</div><div class="value">${fmtMMK(balanceOwed)}</div></div>
+      <div class="stat accent-stamp"><div class="label">Cost Committed (Active)</div><div class="value">${fmtMMK(landedCommitted)}</div></div>
+      <div class="stat"><div class="label">Est. Profit (all active)</div><div class="value">${fmtMMK(estProfit)}</div></div>
+    </div>
+    <div class="tabs" id="tabs">
+      ${tabBtn('dashboard','Dashboard')}${tabBtn('orders','Orders')}${tabBtn('products','Products')}
+      ${tabBtn('pricing','Pricing Calculator')}${tabBtn('agents','Agents')}${tabBtn('settings','Settings')}${tabBtn('data','Data & Backup')}
+    </div>
+    <div class="panel" id="panel"></div>
+  `;
+  document.getElementById('bizName').addEventListener('change', async (e)=>{
+    STATE.settings.businessName = e.target.value || 'My Shop';
+    await sSet('settings', STATE.settings);
+  });
+  document.getElementById('tabs').addEventListener('click', (e)=>{
+    const b = e.target.closest('.tab'); if(!b) return;
+    ACTIVE_TAB = b.dataset.tab; render();
+  });
+  renderPanel();
+}
+function tabBtn(id,label){ return `<button class="tab ${ACTIVE_TAB===id?'active':''}" data-tab="${id}">${label}</button>`; }
+
+function orderLandedMMK(o){
+  if(o.mode==='catalog') return (o.snapLandedMMK||0)*(o.qty||1);
+  return computeLanded(o.cost).landed;
+}
+function orderSellMMK(o){
+  if(o.mode==='catalog') return (o.snapSellMMK||0)*(o.qty||1);
+  return Number(o.sellPriceMMK||0);
+}
+
+/* ---------------- panel router ---------------- */
+function renderPanel(){
+  const panel = document.getElementById('panel');
+  if(ACTIVE_TAB==='dashboard') return renderDashboard(panel);
+  if(ACTIVE_TAB==='orders') return renderOrders(panel);
+  if(ACTIVE_TAB==='products') return renderProducts(panel);
+  if(ACTIVE_TAB==='pricing') return renderPricing(panel);
+  if(ACTIVE_TAB==='agents') return renderAgents(panel);
+  if(ACTIVE_TAB==='settings') return renderSettings(panel);
+  if(ACTIVE_TAB==='data') return renderData(panel);
+}
+
+/* ---------------- dashboard ---------------- */
+function renderDashboard(panel){
+  const counts = {}; STATUS_OPTS.forEach(s=>counts[s.v]=0);
+  STATE.orders.forEach(o=> counts[o.status] = (counts[o.status]||0)+1 );
+  const recent = [...STATE.orders].sort((a,b)=> (b.orderDate||'').localeCompare(a.orderDate||'')).slice(0,6);
+  panel.innerHTML = `
+    <h2>Dashboard</h2>
+    <div class="sub">A quick read of where cash and stock currently stand.</div>
+    <div class="row" style="gap:8px; margin-bottom:18px;">
+      ${STATUS_OPTS.map(s=>`<span class="badge ${s.cls}">${s.label}: ${counts[s.v]||0}</span>`).join('')}
+    </div>
+    ${recent.length ? `
+      <table><thead><tr><th>Customer</th><th>Product</th><th>Status</th><th>Sell Price</th><th>Balance Due</th></tr></thead>
+      <tbody>${recent.map(o=>`
+        <tr><td>${escapeHtml(o.customer)||'—'}</td><td>${escapeHtml(o.product)||'—'}</td>
+        <td><span class="badge ${statusMeta(o.status).cls}">${statusMeta(o.status).label}</span></td>
+        <td class="mono">${fmtMMK(orderSellMMK(o))}</td>
+        <td class="mono">${fmtMMK(Math.max(0,orderSellMMK(o)-Number(o.depositMMK||0)))}</td></tr>
+      `).join('')}</tbody></table>
+    ` : `<div class="card-empty">No orders yet. Go to the Orders tab to log your first customer order.</div>`}
+  `;
+}
+
+/* ---------------- orders ---------------- */
+function blankOrder(){
+  return { id: uid(), mode:'catalog', productId:'', customer:'', phone:'', product:'', qty:1,
+    snapLandedMMK:0, snapSellMMK:0,
+    cost:{unitCost:{amt:0,cur:'USD'}, qty:1, intl:{amt:0,cur:'USD'}, domestic:{amt:0,cur:'MMK'}, lastMile:{amt:0,cur:'MMK'}, agentMode:'percent', agentPct:0, agentFlat:{amt:0,cur:'THB'}, marginPct: STATE.settings.marginPct},
+    sellPriceMMK:0, depositMMK:0, status:'deposit', agentId:'', orderDate: new Date().toISOString().slice(0,10), notes:'' };
+}
+function renderOrders(panel){
+  panel.innerHTML = `
+    <h2>Orders</h2>
+    <div class="sub">Every customer order lives here — deposit, cost, status, balance due.</div>
+    <div class="row" style="margin-bottom:6px;"><button class="btn stamp small" id="newOrderBtn">+ New Order</button></div>
+    <div id="orderFormHolder"></div>
+    ${STATE.orders.length ? renderOrdersTable() : `<div class="card-empty">No orders logged yet.</div>`}
+  `;
+  document.getElementById('newOrderBtn').addEventListener('click', ()=> showOrderForm(blankOrder()));
+  wireOrderTableEvents();
+}
+function renderOrdersTable(){
+  const rows = [...STATE.orders].sort((a,b)=>(b.orderDate||'').localeCompare(a.orderDate||''));
+  return `<table><thead><tr><th>Date</th><th>Customer</th><th>Product</th><th>Qty</th><th>Landed Cost</th><th>Sell Price</th><th>Deposit</th><th>Balance</th><th>Status</th><th>Agent</th><th></th></tr></thead>
+    <tbody>${rows.map(o=>{
+      const agent = STATE.agents.find(a=>a.id===o.agentId);
+      const bal = Math.max(0, orderSellMMK(o)-Number(o.depositMMK||0));
+      return `<tr data-id="${o.id}">
+        <td class="muted mono">${o.orderDate||''}</td>
+        <td>${escapeHtml(o.customer)||'—'}<br><span class="muted">${escapeHtml(o.phone)||''}</span></td>
+        <td>${escapeHtml(o.product)||'—'}</td>
+        <td class="mono">${o.qty||1}</td>
+        <td class="mono">${fmtMMK(orderLandedMMK(o))}</td>
+        <td class="mono">${fmtMMK(orderSellMMK(o))}</td>
+        <td class="mono">${fmtMMK(o.depositMMK)}</td>
+        <td class="mono">${fmtMMK(bal)}</td>
+        <td><span class="badge ${statusMeta(o.status).cls}">${statusMeta(o.status).label}</span></td>
+        <td class="muted">${agent?escapeHtml(agent.name):'—'}</td>
+        <td><button class="icon-btn edit-order" title="Edit">✎</button><button class="icon-btn del-order" title="Delete">✕</button></td>
+      </tr>`;
+    }).join('')}</tbody></table>`;
+}
+function wireOrderTableEvents(){
+  document.querySelectorAll('.edit-order').forEach(btn=>{
+    btn.addEventListener('click', (e)=>{ const id = e.target.closest('tr').dataset.id; const o = STATE.orders.find(x=>x.id===id); if(o) showOrderForm(o); });
+  });
+  document.querySelectorAll('.del-order').forEach(btn=>{
+    btn.addEventListener('click', async (e)=>{
+      const id = e.target.closest('tr').dataset.id;
+      if(!confirm('Delete this order? This cannot be undone.')) return;
+      STATE.orders = STATE.orders.filter(o=>o.id!==id);
+      await sSet('orders', STATE.orders); toast('Order deleted');
+      renderOrders(document.getElementById('panel')); render();
+    });
+  });
+}
+function showOrderForm(o){
+  const holder = document.getElementById('orderFormHolder');
+  const agentOpts = STATE.agents.map(a=>`<option value="${a.id}" ${o.agentId===a.id?'selected':''}>${escapeHtml(a.name)}</option>`).join('');
+  const prodOpts = STATE.products.map(p=>`<option value="${p.id}" ${o.productId===p.id?'selected':''}>${escapeHtml(p.name)} ${p.code?'('+escapeHtml(p.code)+')':''} — ${fmtMMK(p.sellPriceMMK)}</option>`).join('');
+  holder.innerHTML = `
+    <div class="panel" style="background:var(--paper-2); margin-bottom:16px;">
+      <h2 style="margin-bottom:14px;">${STATE.orders.find(x=>x.id===o.id)?'Edit Order':'New Order'}</h2>
+      <div class="field"><label>Item Source</label>
+        <div class="mode-toggle" id="ordModeToggle">
+          <button type="button" data-mode="catalog" class="${o.mode==='catalog'?'on':''}">From Product Catalog</button>
+          <button type="button" data-mode="custom" class="${o.mode==='custom'?'on':''}">Custom / One-off Item</button>
+        </div>
+      </div>
+      <div id="ordCatalogWrap" class="${o.mode==='catalog'?'':'hidden'}" style="margin-top:12px;">
+        ${STATE.products.length ? `
+          <div class="field grow"><label>Select Product</label><select id="f_productId"><option value="">— choose —</option>${prodOpts}</select></div>
+        ` : `<div class="card-empty">No products saved yet. Add one in the Products tab, or switch to Custom / One-off Item.</div>`}
+      </div>
+      <div id="ordCustomWrap" class="${o.mode==='custom'?'':'hidden'}" style="margin-top:6px;">
+        <div class="row"><div class="field grow"><label>Product / Item Name</label><input id="f_productName" value="${escapeAttr(o.product)}"></div></div>
+        ${costFormHtml('ordc', o.cost)}
+        <div class="row"><div class="field"><label>Sell Price (MMK)</label><input id="ordc_sell" type="number" value="${o.sellPriceMMK||0}" style="width:150px;"></div></div>
+      </div>
+      <h3 class="section">Customer</h3>
+      <div class="row">
+        <div class="field"><label>Customer Name</label><input id="f_customer" value="${escapeAttr(o.customer)}"></div>
+        <div class="field"><label>Phone</label><input id="f_phone" value="${escapeAttr(o.phone)}"></div>
+        <div class="field"><label>Qty</label><input id="f_qty" type="number" min="1" value="${o.qty||1}" style="width:80px;"></div>
+        <div class="field"><label>Deposit Paid (MMK)</label><input id="f_deposit" type="number" value="${o.depositMMK||0}" style="width:140px;"></div>
+      </div>
+      <div class="row" style="margin-top:10px;">
+        <div class="field"><label>Status</label><select id="f_status">${STATUS_OPTS.map(s=>`<option value="${s.v}" ${o.status===s.v?'selected':''}>${s.label}</option>`).join('')}</select></div>
+        <div class="field"><label>Agent</label><select id="f_agent"><option value="">—</option>${agentOpts}</select></div>
+        <div class="field"><label>Order Date</label><input id="f_date" type="date" value="${o.orderDate}"></div>
+      </div>
+      <div class="row" style="margin-top:10px;"><div class="field grow"><label>Notes</label><textarea id="f_notes" rows="2">${escapeHtml(o.notes)}</textarea></div></div>
+      <div class="row" style="margin-top:16px;"><button class="btn stamp" id="f_save">Save Order</button><button class="btn ghost" id="f_cancel">Cancel</button></div>
+    </div>
+  `;
+  document.getElementById('f_agent').value = o.agentId||'';
+
+  document.getElementById('ordModeToggle').addEventListener('click',(e)=>{
+    const b = e.target.closest('button'); if(!b) return;
+    const mode = b.dataset.mode; o.mode = mode;
+    document.getElementById('ordModeToggle').querySelectorAll('button').forEach(x=>x.classList.toggle('on', x.dataset.mode===mode));
+    document.getElementById('ordCatalogWrap').classList.toggle('hidden', mode!=='catalog');
+    document.getElementById('ordCustomWrap').classList.toggle('hidden', mode!=='custom');
+  });
+
+  if(o.mode==='custom' || !STATE.products.length){
+    wireCostForm('ordc', ()=>{
+      const f = readCostForm('ordc'); const r = computeLanded(f);
+      document.getElementById('ordc_sell').value = Math.round(r.landed*(1+f.marginPct/100));
+    });
+  }
+
+  document.getElementById('f_cancel').addEventListener('click', ()=>{ holder.innerHTML=''; });
+  document.getElementById('f_save').addEventListener('click', async ()=>{
+    const mode = document.querySelector('#ordModeToggle button.on').dataset.mode;
+    const base = {
+      id:o.id, mode, customer: document.getElementById('f_customer').value.trim(),
+      phone: document.getElementById('f_phone').value.trim(),
+      qty: parseFloat(document.getElementById('f_qty').value)||1,
+      depositMMK: parseFloat(document.getElementById('f_deposit').value)||0,
+      status: document.getElementById('f_status').value,
+      agentId: document.getElementById('f_agent').value,
+      orderDate: document.getElementById('f_date').value,
+      notes: document.getElementById('f_notes').value.trim()
+    };
+    let updated;
+    if(mode==='catalog'){
+      const pid = document.getElementById('f_productId') ? document.getElementById('f_productId').value : '';
+      const p = STATE.products.find(x=>x.id===pid);
+      if(!p){ toast('Choose a product, or switch to Custom item'); return; }
+      updated = Object.assign({}, base, { productId:p.id, product:p.name, snapLandedMMK:p.landedCostMMK, snapSellMMK:p.sellPriceMMK, cost:o.cost, sellPriceMMK:0 });
+    } else {
+      const name = document.getElementById('f_productName').value.trim();
+      if(!name){ toast('Item name required'); return; }
+      const cost = readCostForm('ordc');
+      const sell = parseFloat(document.getElementById('ordc_sell').value)||0;
+      updated = Object.assign({}, base, { productId:'', product:name, cost, sellPriceMMK: sell, snapLandedMMK:0, snapSellMMK:0 });
+    }
+    if(!updated.customer){ toast('Customer name required'); return; }
+    const idx = STATE.orders.findIndex(x=>x.id===o.id);
+    if(idx>=0) STATE.orders[idx]=updated; else STATE.orders.push(updated);
+    await sSet('orders', STATE.orders); toast('Order saved'); holder.innerHTML='';
+    renderOrders(document.getElementById('panel')); render();
+  });
+}
+
+/* ---------------- products ---------------- */
+function blankProduct(){
+  return { id:uid(), code:'', name:'', category:'', notes:'',
+    cost:{unitCost:{amt:0,cur:'USD'}, qty:1, intl:{amt:0,cur:'USD'}, domestic:{amt:0,cur:'MMK'}, lastMile:{amt:0,cur:'MMK'}, agentMode:'percent', agentPct:0, agentFlat:{amt:0,cur:'THB'}, marginPct: STATE.settings.marginPct},
+    landedCostMMK:0, sellPriceMMK:0 };
+}
+function renderProducts(panel){
+  panel.innerHTML = `
+    <h2>Products (Market List)</h2>
+    <div class="sub">Price something once, save it here, and reuse it on every future order without recalculating.</div>
+    <div class="row" style="margin-bottom:6px;"><button class="btn stamp small" id="newProdBtn">+ New Product</button></div>
+    <div id="prodFormHolder"></div>
+    ${STATE.products.length ? `
+      <table><thead><tr><th>Code</th><th>Name</th><th>Category</th><th>Landed Cost</th><th>Sell Price</th><th>Notes</th><th></th></tr></thead>
+      <tbody>${STATE.products.map(p=>`
+        <tr data-id="${p.id}">
+          <td class="mono">${escapeHtml(p.code)||'—'}</td>
+          <td>${escapeHtml(p.name)}</td>
+          <td class="muted">${escapeHtml(p.category)||'—'}</td>
+          <td class="mono">${fmtMMK(p.landedCostMMK)}</td>
+          <td class="mono">${fmtMMK(p.sellPriceMMK)}</td>
+          <td class="muted">${escapeHtml(p.notes)||''}</td>
+          <td><button class="icon-btn edit-prod" title="Edit">✎</button><button class="icon-btn del-prod" title="Delete">✕</button></td>
+        </tr>`).join('')}</tbody></table>
+    ` : `<div class="card-empty">No products saved yet.</div>`}
+  `;
+  document.getElementById('newProdBtn').addEventListener('click', ()=> showProductForm(blankProduct()));
+  document.querySelectorAll('.edit-prod').forEach(btn=>{
+    btn.addEventListener('click', e=>{ const id=e.target.closest('tr').dataset.id; const p=STATE.products.find(x=>x.id===id); if(p) showProductForm(p); });
+  });
+  document.querySelectorAll('.del-prod').forEach(btn=>{
+    btn.addEventListener('click', async e=>{
+      const id=e.target.closest('tr').dataset.id;
+      if(!confirm('Delete this product from the catalog?')) return;
+      STATE.products = STATE.products.filter(p=>p.id!==id);
+      await sSet('products', STATE.products); toast('Product deleted');
+      renderProducts(document.getElementById('panel'));
+    });
+  });
+}
+function showProductForm(p){
+  const holder = document.getElementById('prodFormHolder');
+  holder.innerHTML = `
+    <div class="panel" style="background:var(--paper-2); margin-bottom:16px;">
+      <div class="row">
+        <div class="field"><label>Item Code / SKU</label><input id="p_code" value="${escapeAttr(p.code)}" style="width:120px;"></div>
+        <div class="field grow"><label>Item Name</label><input id="p_name" value="${escapeAttr(p.name)}"></div>
+        <div class="field"><label>Category</label><input id="p_category" value="${escapeAttr(p.category)}" style="width:140px;"></div>
+      </div>
+      ${costFormHtml('pc', p.cost)}
+      <div class="row"><div class="field"><label>Sell Price (MMK)</label><input id="pc_sell" type="number" value="${p.sellPriceMMK||0}" style="width:150px;"></div></div>
+      <div class="row" style="margin-top:10px;"><div class="field grow"><label>Notes</label><textarea id="p_notes" rows="2">${escapeHtml(p.notes)}</textarea></div></div>
+      <div class="row" style="margin-top:16px;"><button class="btn stamp" id="p_save">Save Product</button><button class="btn ghost" id="p_cancel">Cancel</button></div>
+    </div>
+  `;
+  wireCostForm('pc', ()=>{
+    const f = readCostForm('pc'); const r = computeLanded(f);
+    const perUnit = r.landed/(f.qty||1);
+    document.getElementById('pc_sell').value = Math.round(perUnit*(1+f.marginPct/100));
+  });
+  document.getElementById('p_cancel').addEventListener('click', ()=> holder.innerHTML='');
+  document.getElementById('p_save').addEventListener('click', async ()=>{
+    const name = document.getElementById('p_name').value.trim();
+    if(!name){ toast('Item name required'); return; }
+    const cost = readCostForm('pc');
+    const r = computeLanded(cost);
+    const perUnitLanded = r.landed/(cost.qty||1);
+    const updated = {
+      id:p.id, code: document.getElementById('p_code').value.trim(), name, category: document.getElementById('p_category').value.trim(),
+      notes: document.getElementById('p_notes').value.trim(), cost,
+      landedCostMMK: perUnitLanded, sellPriceMMK: parseFloat(document.getElementById('pc_sell').value)||0
+    };
+    const idx = STATE.products.findIndex(x=>x.id===p.id);
+    if(idx>=0) STATE.products[idx]=updated; else STATE.products.push(updated);
+    await sSet('products', STATE.products); toast('Product saved to catalog'); holder.innerHTML='';
+    renderProducts(document.getElementById('panel'));
+  });
+}
+
+/* ---------------- pricing calculator (scratchpad) ---------------- */
+function renderPricing(panel){
+  panel.innerHTML = `
+    <h2>Pricing Calculator</h2>
+    <div class="sub">A scratchpad for "what if" pricing. Save the result straight to Products when you're happy with it — no need to redo the math on the order form later.</div>
+    <div class="calc-grid">
+      <div>${costFormHtml('calc', null)}
+        <div class="row" style="margin-top:6px;"><div class="field grow"><label>Save as Product — Name</label><input id="calc_name" placeholder="e.g. Rhode Peptide Lip Tint"></div>
+        <div class="field"><label>Code</label><input id="calc_code" style="width:110px;"></div></div>
+        <div class="row" style="margin-top:14px;"><button class="btn jade" id="calc_saveProd">Save as Product →</button></div>
+      </div>
+      <div class="result" id="calc_result">
+        <div class="line"><span>Item Cost</span><span class="v">—</span></div>
+        <div class="line"><span>International Shipping</span><span class="v">—</span></div>
+        <div class="line"><span>Domestic Transfer</span><span class="v">—</span></div>
+        <div class="line"><span>Last-Mile Delivery</span><span class="v">—</span></div>
+        <div class="line"><span>Agent Fee</span><span class="v">—</span></div>
+        <div class="line"><span>Landed Cost (per unit)</span><span class="v">—</span></div>
+        <div class="line total"><span>Suggested Price</span><span class="v">—</span></div>
+        <div class="line"><span>Profit per Unit</span><span class="v">—</span></div>
+      </div>
+    </div>
+  `;
+  const calc = ()=>{
+    const f = readCostForm('calc'); const r = computeLanded(f);
+    const perUnitLanded = r.landed/(f.qty||1);
+    const price = perUnitLanded*(1+f.marginPct/100);
+    document.getElementById('calc_result').innerHTML = `
+      <div class="line"><span>Item Cost</span><span class="v">${fmtMMK(r.itemMMK)}</span></div>
+      <div class="line"><span>International Shipping</span><span class="v">${fmtMMK(r.intlMMK)}</span></div>
+      <div class="line"><span>Domestic Transfer</span><span class="v">${fmtMMK(r.domMMK)}</span></div>
+      <div class="line"><span>Last-Mile Delivery</span><span class="v">${fmtMMK(r.lastMMK)}</span></div>
+      <div class="line"><span>Agent Fee</span><span class="v">${fmtMMK(r.agentMMK)}</span></div>
+      <div class="line"><span>Landed Cost (per unit)</span><span class="v">${fmtMMK(perUnitLanded)}</span></div>
+      <div class="line total"><span>Suggested Price</span><span class="v">${fmtMMK(price)}</span></div>
+      <div class="line"><span>Profit per Unit</span><span class="v">${fmtMMK(price-perUnitLanded)}</span></div>
+    `;
+    return {perUnitLanded, price};
+  };
+  wireCostForm('calc', calc);
+  calc();
+  document.getElementById('calc_saveProd').addEventListener('click', async ()=>{
+    const name = document.getElementById('calc_name').value.trim();
+    if(!name){ toast('Give the product a name first'); return; }
+    const f = readCostForm('calc'); const res = calc();
+    const product = { id:uid(), code: document.getElementById('calc_code').value.trim(), name, category:'', notes:'',
+      cost:f, landedCostMMK: res.perUnitLanded, sellPriceMMK: res.price };
+    STATE.products.push(product);
+    await sSet('products', STATE.products);
+    toast('Saved to Products — find it under the Products tab');
+  });
+}
+
+/* ---------------- agents ---------------- */
+function blankAgent(){ return { id: uid(), name:'', contact:'', location:'', notes:'' }; }
+function renderAgents(panel){
+  panel.innerHTML = `
+    <h2>Agents / Suppliers</h2>
+    <div class="sub">Whoever buys and ships on your behalf overseas.</div>
+    <div class="row" style="margin-bottom:6px;"><button class="btn stamp small" id="newAgentBtn">+ New Agent</button></div>
+    <div id="agentFormHolder"></div>
+    ${STATE.agents.length ? `
+      <table><thead><tr><th>Name</th><th>Contact</th><th>Location</th><th>Notes</th><th></th></tr></thead>
+      <tbody>${STATE.agents.map(a=>`
+        <tr data-id="${a.id}"><td>${escapeHtml(a.name)}</td><td class="muted">${escapeHtml(a.contact)}</td>
+        <td class="muted">${escapeHtml(a.location)}</td><td class="muted">${escapeHtml(a.notes)}</td>
+        <td><button class="icon-btn edit-agent" title="Edit">✎</button><button class="icon-btn del-agent" title="Delete">✕</button></td></tr>
+      `).join('')}</tbody></table>
+    ` : `<div class="card-empty">No agents added yet.</div>`}
+  `;
+  document.getElementById('newAgentBtn').addEventListener('click', ()=> showAgentForm(blankAgent()));
+  document.querySelectorAll('.edit-agent').forEach(btn=>{
+    btn.addEventListener('click', e=>{ const id=e.target.closest('tr').dataset.id; const a=STATE.agents.find(x=>x.id===id); if(a) showAgentForm(a); });
+  });
+  document.querySelectorAll('.del-agent').forEach(btn=>{
+    btn.addEventListener('click', async e=>{
+      const id=e.target.closest('tr').dataset.id;
+      if(!confirm('Delete this agent?')) return;
+      STATE.agents = STATE.agents.filter(a=>a.id!==id);
+      await sSet('agents', STATE.agents); toast('Agent deleted');
+      renderAgents(document.getElementById('panel'));
+    });
+  });
+}
+function showAgentForm(a){
+  const holder = document.getElementById('agentFormHolder');
+  holder.innerHTML = `
+    <div class="panel" style="background:var(--paper-2); margin-bottom:16px;">
+      <div class="row">
+        <div class="field"><label>Name</label><input id="a_name" value="${escapeAttr(a.name)}"></div>
+        <div class="field"><label>Contact (Telegram/Phone)</label><input id="a_contact" value="${escapeAttr(a.contact)}"></div>
+        <div class="field"><label>Location</label><input id="a_location" value="${escapeAttr(a.location)}"></div>
+        <div class="field grow"><label>Notes</label><input id="a_notes" value="${escapeAttr(a.notes)}"></div>
+      </div>
+      <div class="row" style="margin-top:14px;"><button class="btn stamp" id="a_save">Save Agent</button><button class="btn ghost" id="a_cancel">Cancel</button></div>
+    </div>
+  `;
+  document.getElementById('a_cancel').addEventListener('click', ()=> holder.innerHTML='');
+  document.getElementById('a_save').addEventListener('click', async ()=>{
+    const updated = { id:a.id, name: document.getElementById('a_name').value.trim(), contact: document.getElementById('a_contact').value.trim(),
+      location: document.getElementById('a_location').value.trim(), notes: document.getElementById('a_notes').value.trim() };
+    if(!updated.name){ toast('Agent name required'); return; }
+    const idx = STATE.agents.findIndex(x=>x.id===a.id);
+    if(idx>=0) STATE.agents[idx]=updated; else STATE.agents.push(updated);
+    await sSet('agents', STATE.agents); toast('Agent saved'); holder.innerHTML='';
+    renderAgents(document.getElementById('panel'));
+  });
+}
+
+/* ---------------- settings ---------------- */
+function renderSettings(panel){
+  const s = STATE.settings;
+  panel.innerHTML = `
+    <h2>Settings</h2>
+    <div class="sub">Defaults used across new orders, products, and the pricing calculator.</div>
+    <div class="row"><div class="field"><label>Business Name</label><input id="s_name" value="${escapeAttr(s.businessName)}"></div>
+    <div class="field"><label>Default Margin %</label><input id="s_margin" type="number" value="${s.marginPct}" style="width:100px;"></div></div>
+    <h3 class="section">Exchange Rates (1 unit = ? MMK)</h3>
+    <div class="rate-grid">
+      ${CURRENCIES.filter(c=>c!=='MMK').map(c=>`
+        <div class="rate-item"><label>${CUR_LABEL[c]}</label><input id="rate_${c}" type="number" value="${s.rates[c]}"></div>
+      `).join('')}
+    </div>
+    <div class="row" style="margin-top:16px;"><button class="btn stamp" id="s_save">Save Settings</button></div>
+  `;
+  document.getElementById('s_save').addEventListener('click', async ()=>{
+    const rates = {MMK:1};
+    CURRENCIES.filter(c=>c!=='MMK').forEach(c=>{ rates[c] = parseFloat(document.getElementById('rate_'+c).value)||STATE.settings.rates[c]; });
+    STATE.settings = { businessName: document.getElementById('s_name').value.trim()||'My Shop',
+      marginPct: parseFloat(document.getElementById('s_margin').value)||25, rates };
+    await sSet('settings', STATE.settings); toast('Settings saved'); render();
+  });
+}
+
+/* ---------------- data & backup ---------------- */
+function renderData(panel){
+  panel.innerHTML = `
+    <h2>Data &amp; Backup</h2>
+    <div class="sub">Export, back up, and move your ledger between devices.</div>
+    <div class="info-box">
+      ${HAS_CLOUD_STORAGE
+        ? 'Storage mode: Claude account storage. This ledger is tied to your Claude account, not to one phone or browser — opening this same artifact while signed in elsewhere should show the same data.'
+        : 'Storage mode: this browser only. This copy is running as a standalone webpage, so data saves to this device/browser and will not appear on any other device automatically. Use the backup file below to move data between devices or people.'}
+      The backup file below is your manual safety net and the way to move data into Google Drive yourself.
+    </div>
+    <h3 class="section">Export to Excel</h3>
+    <div class="row"><button class="btn jade" id="d_excel">Download .xlsx (Orders, Products, Agents)</button></div>
+    <h3 class="section">Backup</h3>
+    <div class="row">
+      <button class="btn ghost" id="d_backup">Download Backup File (.json)</button>
+      <div class="field"><label>Restore from Backup</label><input type="file" id="d_restore" accept="application/json"></div>
+    </div>
+    <p class="muted" style="max-width:520px; margin-top:6px;">Download the backup file, then move it into your Google Drive folder (Drive app or desktop sync) to store it in the cloud. On another device, download that same file from Drive and use "Restore from Backup" here to load it in.</p>
+    <h3 class="section">Reset</h3>
+    <div class="row"><button class="btn danger" id="d_reset">Reset All Data</button>
+    <span class="muted" style="align-self:center;">Deletes all orders, products, agents, and settings.</span></div>
+  `;
+  document.getElementById('d_excel').addEventListener('click', ()=>{
+    try{
+      const wb = XLSX.utils.book_new();
+      const ordRows = STATE.orders.map(o=>({
+        Date:o.orderDate, Customer:o.customer, Phone:o.phone, Product:o.product, Qty:o.qty,
+        'Landed Cost (MMK)':Math.round(orderLandedMMK(o)), 'Sell Price (MMK)':Math.round(orderSellMMK(o)),
+        'Deposit (MMK)':o.depositMMK, 'Balance (MMK)':Math.round(Math.max(0,orderSellMMK(o)-o.depositMMK)),
+        Status:statusMeta(o.status).label, Agent:(STATE.agents.find(a=>a.id===o.agentId)||{}).name||'', Notes:o.notes
+      }));
+      const prodRows = STATE.products.map(p=>({ Code:p.code, Name:p.name, Category:p.category,
+        'Landed Cost (MMK)':Math.round(p.landedCostMMK), 'Sell Price (MMK)':Math.round(p.sellPriceMMK), Notes:p.notes }));
+      const agentRows = STATE.agents.map(a=>({ Name:a.name, Contact:a.contact, Location:a.location, Notes:a.notes }));
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(ordRows), 'Orders');
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(prodRows), 'Products');
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(agentRows), 'Agents');
+      XLSX.writeFile(wb, `ledger-export-${new Date().toISOString().slice(0,10)}.xlsx`);
+      toast('Excel file downloaded');
+    }catch(e){ console.error(e); toast('Export failed — check console'); }
+  });
+  document.getElementById('d_backup').addEventListener('click', ()=>{
+    const data = { orders:STATE.orders, agents:STATE.agents, products:STATE.products, settings:STATE.settings, exportedAt:new Date().toISOString() };
+    const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href=url; a.download=`ledger-backup-${new Date().toISOString().slice(0,10)}.json`;
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    toast('Backup downloaded');
+  });
+  document.getElementById('d_restore').addEventListener('change', (e)=>{
+    const file = e.target.files[0]; if(!file) return;
+    const reader = new FileReader();
+    reader.onload = async (ev)=>{
+      try{
+        const data = JSON.parse(ev.target.result);
+        if(!confirm('This will replace all current data with the backup file. Continue?')) return;
+        STATE.orders = data.orders||[]; STATE.agents = data.agents||[]; STATE.products = data.products||[];
+        STATE.settings = Object.assign({businessName:'My Shop', marginPct:25, rates:{MMK:1,USD:2100,THB:60,CNY:290,JPY:14,SGD:1550}}, data.settings||{});
+        await Promise.all([sSet('orders',STATE.orders), sSet('agents',STATE.agents), sSet('products',STATE.products), sSet('settings',STATE.settings)]);
+        toast('Backup restored'); render();
+      }catch(err){ console.error(err); toast('Could not read that file'); }
+    };
+    reader.readAsText(file);
+  });
+  document.getElementById('d_reset').addEventListener('click', async ()=>{
+    if(!confirm('This deletes every order, product, and agent stored in this ledger. Continue?')) return;
+    STATE.orders=[]; STATE.agents=[]; STATE.products=[];
+    STATE.settings = {businessName:'My Shop', marginPct:25, rates:{MMK:1,USD:2100,THB:60,CNY:290,JPY:14,SGD:1550}};
+    await Promise.all([sSet('orders',[]), sSet('agents',[]), sSet('products',[]), sSet('settings', STATE.settings)]);
+    toast('All data reset'); render();
+  });
+}
+
+init();
+</script>
+</body>
+</html>
