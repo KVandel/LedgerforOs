@@ -141,6 +141,13 @@ tbody tr:hover{ background: rgba(184,137,43,0.06); }
 .rate-item input{ width:100%; margin-top:4px; }
 .rate-note{ font-size:11px; color:var(--jade-dark); margin-top:4px; font-family:'IBM Plex Mono', monospace; }
 .priced-note{ font-size:10.5px; color:var(--ink-soft); margin-top:2px; }
+.formula-box{ background:rgba(184,137,43,0.08); border:1px solid rgba(184,137,43,0.3); border-radius:var(--radius); padding:14px 16px; font-size:12.5px; color:#7d5f1d; margin-bottom:16px; }
+.formula-box .f-line{ font-family:'IBM Plex Mono', monospace; font-size:12px; margin-top:6px; color:#5c451a; }
+.section-hint{ font-size:11px; color:var(--ink-soft); font-style:italic; margin:-4px 0 8px; }
+.formula-hint{ font-size:10.5px; color:var(--ink-soft); margin-top:2px; font-family:'IBM Plex Mono', monospace; line-height:1.4; }
+.result .line-wrap{ padding:7px 0; border-bottom:1px dashed var(--line); }
+.result .line-wrap:last-child{ border-bottom:none; }
+.result .line-wrap .line{ padding:0; border-bottom:none; }
 .cargo-list{ display:flex; flex-direction:column; gap:6px; margin-top:8px; }
 .cargo-row{ display:flex; align-items:center; justify-content:space-between; background:#fff; border:1px solid var(--line); border-radius:4px; padding:8px 12px; font-size:12.5px; }
 .mode-toggle button:disabled{ opacity:0.4; cursor:not-allowed; }
@@ -401,17 +408,20 @@ function costFormHtml(prefix, f){
   const marginMode = f.marginMode || 'percent';
   return `
     <h3 class="section">Item Cost</h3>
+    <div class="section-hint">Unit Cost × Qty, converted to Ks at today's rate</div>
     <div class="row">
       <div class="field"><label>Unit Cost</label>${curPairHtml(prefix+'_uc', uc.amt, uc.cur)}</div>
       <div class="field"><label>Qty</label><input id="${prefix}_qty" type="number" min="1" value="${f.qty||1}" style="width:80px;"></div>
     </div>
     <h3 class="section">Shipping Legs</h3>
+    <div class="section-hint">International = cargo fee by KG (or flat) from origin to Myanmar · Domestic = "local cargo" inside Myanmar · Last-mile = to the customer's door</div>
     <div class="row">
       ${shipLegHtml(prefix, 'intl', 'International (origin → Myanmar)', f.intl)}
       ${shipLegHtml(prefix, 'dom', 'Domestic transfer (MM warehouse → my store)', f.domestic)}
       ${shipLegHtml(prefix, 'last', 'Last-mile (my store → customer)', f.lastMile)}
     </div>
     <h3 class="section">Agent Fee</h3>
+    <div class="section-hint">% mode charges on (Item Cost + International Shipping) in Ks; Flat mode is a fixed amount</div>
     <div class="row">
       <div class="field"><label>Fee Type</label>
         <div class="mode-toggle" id="${prefix}_agentModeToggle">
@@ -424,6 +434,7 @@ function costFormHtml(prefix, f){
       <div class="field ${agentMode==='flat'?'':'hidden'}" id="${prefix}_agentFlatWrap"><label>Flat Fee</label>${curPairHtml(prefix+'_agentFlat', agentFlat.amt, agentFlat.cur)}</div>
     </div>
     <h3 class="section">Pricing</h3>
+    <div class="section-hint">Markup is added on top of the full Landed Cost (item + all shipping + agent fee)</div>
     <div class="row">
       <div class="field"><label>Margin Type</label>
         <div class="mode-toggle" id="${prefix}_marginModeToggle">
@@ -866,6 +877,12 @@ function renderPricing(panel){
   panel.innerHTML = `
     <h2>Pricing Calculator</h2>
     <div class="sub">A scratchpad for "what if" pricing. Save the result straight to Products when you're happy with it — no need to redo the math on the order form later.</div>
+    <div class="formula-box">
+      <div><strong>How this is calculated:</strong></div>
+      <div class="f-line">Landed Cost = (Unit Cost + Agent Fee + Int'l Shipping) → converted to Ks + Domestic ("local") Cargo + Last-Mile</div>
+      <div class="f-line">Suggested Price = Landed Cost + Markup</div>
+      <div class="f-line">Profit / Unit = Actual Sell Price − Landed Cost</div>
+    </div>
     <div class="calc-grid">
       <div>${costFormHtml('calc', null)}
         <div class="row" style="margin-top:6px;"><div class="field grow"><label>Save as Product — Name</label><input id="calc_name" placeholder="e.g. Rhode Peptide Lip Tint"></div>
@@ -888,15 +905,30 @@ function renderPricing(panel){
     const f = readCostForm('calc'); const r = computeLanded(f);
     const perUnitLanded = r.landed/(f.qty||1);
     const price = computeSell(perUnitLanded, f);
+    const rate = STATE.settings.rates[f.unitCost.cur]||1;
+    const agentHint = f.agentMode==='flat'
+      ? `Flat fee: ${fmt2(f.agentFlat.amt)} ${f.agentFlat.cur} → Ks`
+      : `${f.agentPct||0}% × (Item Cost + Int'l Shipping in Ks)`;
+    const marginHint = f.marginMode==='flat'
+      ? `Landed Cost + ${fmtMMK(f.marginFlatMMK)} fixed profit`
+      : `Landed Cost × (1 + ${f.marginPct||0}%)`;
     document.getElementById('calc_result').innerHTML = `
-      <div class="line"><span>Item Cost</span><span class="v">${fmtMMK(r.itemMMK)}</span></div>
-      <div class="line"><span>International Shipping</span><span class="v">${fmtMMK(r.intlMMK)}</span></div>
-      <div class="line"><span>Domestic Transfer</span><span class="v">${fmtMMK(r.domMMK)}</span></div>
-      <div class="line"><span>Last-Mile Delivery</span><span class="v">${fmtMMK(r.lastMMK)}</span></div>
-      <div class="line"><span>Agent Fee</span><span class="v">${fmtMMK(r.agentMMK)}</span></div>
-      <div class="line"><span>Landed Cost (per unit)</span><span class="v">${fmtMMK(perUnitLanded)}</span></div>
-      <div class="line total"><span>Suggested Price</span><span class="v">${fmtMMK(price)}</span></div>
-      <div class="line"><span>Profit per Unit</span><span class="v">${fmtMMK(price-perUnitLanded)}</span></div>
+      <div class="line-wrap"><div class="line"><span>Item Cost</span><span class="v">${fmtMMK(r.itemMMK)}</span></div>
+        <div class="formula-hint">${fmt2(f.unitCost.amt)} ${f.unitCost.cur} × ${f.qty||1} qty × ${rate.toLocaleString()} = ${fmtMMK(r.itemMMK)}</div></div>
+      <div class="line-wrap"><div class="line"><span>International Shipping</span><span class="v">${fmtMMK(r.intlMMK)}</span></div>
+        <div class="formula-hint">${f.intl.mode==='weight' ? `${fmt2(f.intl.weightKg)} kg × cargo rate` : `${fmt2(f.intl.amt)} ${f.intl.cur}`} → ${fmtMMK(r.intlMMK)}</div></div>
+      <div class="line-wrap"><div class="line"><span>Domestic Transfer (local cargo)</span><span class="v">${fmtMMK(r.domMMK)}</span></div>
+        <div class="formula-hint">${f.domestic.mode==='weight' ? `${fmt2(f.domestic.weightKg)} kg × cargo rate` : `${fmt2(f.domestic.amt)} ${f.domestic.cur}`} → ${fmtMMK(r.domMMK)}</div></div>
+      <div class="line-wrap"><div class="line"><span>Last-Mile Delivery</span><span class="v">${fmtMMK(r.lastMMK)}</span></div>
+        <div class="formula-hint">${f.lastMile.mode==='weight' ? `${fmt2(f.lastMile.weightKg)} kg × cargo rate` : `${fmt2(f.lastMile.amt)} ${f.lastMile.cur}`} → ${fmtMMK(r.lastMMK)}</div></div>
+      <div class="line-wrap"><div class="line"><span>Agent Fee</span><span class="v">${fmtMMK(r.agentMMK)}</span></div>
+        <div class="formula-hint">${agentHint} = ${fmtMMK(r.agentMMK)}</div></div>
+      <div class="line-wrap"><div class="line total"><span>Landed Cost (per unit)</span><span class="v">${fmtMMK(perUnitLanded)}</span></div>
+        <div class="formula-hint">(${fmtMMK(r.itemMMK)} + ${fmtMMK(r.intlMMK)} + ${fmtMMK(r.agentMMK)} + ${fmtMMK(r.domMMK)} + ${fmtMMK(r.lastMMK)}) ÷ ${f.qty||1} qty</div></div>
+      <div class="line-wrap"><div class="line total"><span>Suggested Price</span><span class="v">${fmtMMK(price)}</span></div>
+        <div class="formula-hint">${marginHint} = ${fmtMMK(price)}</div></div>
+      <div class="line-wrap"><div class="line"><span>Suggested Profit / Unit</span><span class="v">${fmtMMK(price-perUnitLanded)}</span></div>
+        <div class="formula-hint">${fmtMMK(price)} − ${fmtMMK(perUnitLanded)} landed = ${fmtMMK(price-perUnitLanded)}</div></div>
     `;
     return {perUnitLanded, price};
   };
