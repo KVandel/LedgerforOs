@@ -2,168 +2,236 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Ledger — Resale Business System</title>
+<meta name="theme-color" content="#F2F2F7">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Ledger">
+<link rel="icon" id="favicon" href="">
+<link rel="apple-touch-icon" id="appleTouchIcon" href="">
+<link rel="manifest" id="webManifest" href="">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js"></script>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Special+Elite&family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap');
 
 :root{
-  --shell:#1B222C;
-  --paper:#F7F2E4;
-  --paper-2:#EFE8D4;
-  --ink:#262019;
-  --ink-soft:#6b6152;
-  --line: rgba(38,32,25,0.14);
-  --stamp:#A5311F;
-  --stamp-dark:#7c2416;
-  --jade:#2F6B5E;
-  --jade-dark:#204c43;
-  --gold:#B8892B;
-  --danger:#A5311F;
-  --radius: 6px;
+  --shell:#F2F2F7;
+  --paper:#FFFFFF;
+  --paper-2:#F7F7FA;
+  --ink:#1C1C1E;
+  --ink-soft:#8A8A8E;
+  --line: rgba(60,60,67,0.13);
+  --stamp:#FF3B30;
+  --stamp-dark:#D70015;
+  --jade:#34C759;
+  --jade-dark:#1F8A3D;
+  --gold:#FF9500;
+  --gold-dark:#B8710A;
+  --blue:#007AFF;
+  --blue-dark:#0058D6;
+  --danger:#FF3B30;
+  --radius: 14px;
+  --radius-sm: 10px;
+  --shadow: 0 1px 2px rgba(0,0,0,0.04), 0 8px 24px -12px rgba(0,0,0,0.10);
 }
-*{box-sizing:border-box;}
+*{box-sizing:border-box; -webkit-tap-highlight-color: transparent;}
 html,body{margin:0;padding:0;}
+html{ -webkit-text-size-adjust:100%; }
 body{
   background: var(--shell);
-  background-image:
-    radial-gradient(circle at 15% 0%, rgba(184,137,43,0.08), transparent 40%),
-    radial-gradient(circle at 90% 100%, rgba(47,107,94,0.10), transparent 45%);
   color: var(--ink);
-  font-family: 'Inter', sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', sans-serif;
+  -webkit-font-smoothing: antialiased;
   min-height: 100vh;
-  padding: 28px 16px 60px;
+  min-height: 100dvh;
+  padding: 24px 18px 60px;
 }
 .wrap{ max-width: 1150px; margin: 0 auto; }
 .letterhead{
-  background: var(--paper); border-radius: var(--radius); border: 1px solid var(--line);
-  padding: 22px 26px; display:flex; align-items:center; justify-content:space-between; gap: 20px;
-  box-shadow: 0 18px 40px -20px rgba(0,0,0,0.6); position:relative; overflow:hidden;
-}
-.letterhead::before{
-  content:""; position:absolute; inset:0;
-  background-image: repeating-linear-gradient(to bottom, transparent 0 27px, var(--line) 27px 28px);
-  opacity:0.5; pointer-events:none;
+  background: var(--paper); border-radius: var(--radius); border: none;
+  padding: 20px 24px; display:flex; align-items:center; justify-content:space-between; gap: 20px;
+  box-shadow: var(--shadow); position:relative; overflow:hidden;
 }
 .brandrow{ position:relative; z-index:1; }
 .brand-input{
-  font-family:'Special Elite', monospace; font-size: 26px; letter-spacing: 0.5px;
-  background:transparent; border:none; color: var(--ink); border-bottom: 1px dashed transparent;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', sans-serif;
+  font-weight:700; font-size: 24px; letter-spacing: -0.3px;
+  background:transparent; border:none; color: var(--ink); border-bottom: 1px solid transparent;
   padding: 2px 0; max-width: 420px;
 }
-.brand-input:focus{ outline:none; border-bottom-color: var(--stamp); }
-.tagline{ font-size:12.5px; color: var(--ink-soft); margin-top:4px; text-transform:uppercase; letter-spacing:1.4px; }
+.brand-input:focus{ outline:none; border-bottom-color: var(--blue); }
+.tagline{ font-size:12.5px; color: var(--ink-soft); margin-top:4px; letter-spacing:0.1px; }
 .dateline{ font-family:'IBM Plex Mono', monospace; font-size:12px; color: var(--ink-soft); margin-top:2px; }
 .stamp{
-  position:relative; z-index:1; width: 78px; height: 78px; flex:0 0 auto;
-  border: 3px solid var(--stamp); border-radius: 50%; display:flex; align-items:center; justify-content:center;
-  transform: rotate(-9deg); color: var(--stamp); font-family:'Special Elite', monospace; text-align:center;
-  font-size: 10.5px; line-height:1.25; letter-spacing:0.5px; opacity: 0.88; box-shadow: inset 0 0 0 1px var(--stamp);
+  position:relative; z-index:1; width: 54px; height: 54px; flex:0 0 auto;
+  background: linear-gradient(150deg, var(--blue), var(--blue-dark)); border-radius: 16px; display:flex; align-items:center; justify-content:center;
+  color: #fff; font-family: -apple-system, BlinkMacSystemFont, sans-serif; font-weight:700; text-align:center;
+  font-size: 18px; line-height:1.1; letter-spacing:0.2px; box-shadow: 0 6px 14px -4px rgba(0,88,214,0.55);
 }
 .stats{ display:grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 14px; }
-.stat{ background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; }
-.stat .label{ font-size:11px; text-transform:uppercase; letter-spacing:1px; color: var(--ink-soft); margin-bottom:6px;}
-.stat .value{ font-family:'IBM Plex Mono', monospace; font-size:19px; font-weight:600; color: var(--ink);}
+.stat{ background: var(--paper); border: none; border-radius: var(--radius); padding: 14px 16px; box-shadow: var(--shadow); }
+.stat .label{ font-size:11px; letter-spacing:0.1px; color: var(--ink-soft); margin-bottom:6px;}
+.stat .value{ font-family:'IBM Plex Mono', monospace; font-size:18px; font-weight:600; color: var(--ink);}
 .stat.accent-jade .value{ color: var(--jade-dark); }
-.stat.accent-gold .value{ color: #8a6821; }
+.stat.accent-gold .value{ color: var(--gold-dark); }
 .stat.accent-stamp .value{ color: var(--stamp-dark); }
-.tabs{ display:flex; gap:4px; margin-top:22px; flex-wrap:wrap; border-bottom: 2px solid rgba(247,242,228,0.15); }
+.tabs{ display:flex; gap:2px; margin-top:20px; flex-wrap:wrap; background:rgba(120,120,128,0.12); border-radius:12px; padding:3px; }
 .tab{
-  font-family:'Special Elite', monospace; font-size: 12.5px; letter-spacing:0.4px; background: transparent;
-  color: rgba(247,242,228,0.55); border:none; padding: 10px 15px; cursor:pointer; border-bottom: 2px solid transparent;
-  margin-bottom:-2px; transition: color .15s ease;
+  font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif; font-size: 12.5px; font-weight:600; letter-spacing:0.1px; background: transparent;
+  color: var(--ink-soft); border:none; border-radius:9px; padding: 8px 14px; cursor:pointer;
+  transition: color .15s ease, background .15s ease;
 }
-.tab:hover{ color: rgba(247,242,228,0.85); }
-.tab.active{ color: #F7F2E4; border-bottom-color: var(--stamp); }
-.panel{ background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius); padding: 22px 24px 26px; min-height: 320px; }
-.panel h2{ font-family:'Special Elite', monospace; font-size:16px; margin:0 0 4px; }
+.tab:hover{ color: var(--ink); }
+.tab.active{ color: var(--ink); background: var(--paper); box-shadow: 0 1px 3px rgba(0,0,0,0.12); }
+.panel{ background: var(--paper); border: none; border-radius: var(--radius); padding: 22px 24px 26px; min-height: 320px; box-shadow: var(--shadow); margin-top:14px; }
+.panel h2{ font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif; font-weight:700; font-size:19px; letter-spacing:-0.2px; margin:0 0 4px; }
 .panel .sub{ font-size:12.5px; color:var(--ink-soft); margin-bottom:18px;}
-h3.section{ font-size:12px; text-transform:uppercase; letter-spacing:0.8px; color:var(--ink-soft); margin:18px 0 8px; border-top:1px dashed var(--line); padding-top:14px;}
+h3.section{ font-size:11.5px; text-transform:uppercase; letter-spacing:0.5px; color:var(--ink-soft); font-weight:600; margin:18px 0 8px; border-top:1px solid var(--line); padding-top:14px;}
 h3.section:first-of-type{ border-top:none; padding-top:0; margin-top:6px; }
-button{ font-family:'Inter',sans-serif; cursor:pointer; }
-.btn{ background: var(--ink); color: var(--paper); border:none; border-radius:4px; padding: 9px 16px; font-size:13px; font-weight:600; letter-spacing:0.2px; }
+button{ font-family:-apple-system, BlinkMacSystemFont, 'Inter',sans-serif; cursor:pointer; }
+.btn{ background: var(--blue); color: #fff; border:none; border-radius:var(--radius-sm); padding: 10px 16px; font-size:13.5px; font-weight:600; letter-spacing:0.1px; transition: opacity .12s ease, transform .05s ease; }
 .btn:hover{ opacity:0.88; }
-.btn.ghost{ background:transparent; color:var(--ink); border:1px solid var(--line); }
+.btn:active{ transform: scale(0.98); }
+.btn.ghost{ background:rgba(120,120,128,0.14); color:var(--ink); border:none; }
 .btn.stamp{ background: var(--stamp); color:#fff; }
 .btn.jade{ background: var(--jade); color:#fff; }
-.btn.small{ padding:5px 10px; font-size:11.5px; border-radius:3px; }
-.btn.danger{ background:transparent; color: var(--danger); border:1px solid rgba(165,49,31,0.4); }
+.btn.small{ padding:6px 12px; font-size:12px; border-radius:8px; }
+.btn.danger{ background:rgba(255,59,48,0.10); color: var(--danger); border:none; }
 .row{ display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; }
 .field{ display:flex; flex-direction:column; gap:4px; }
-.field label{ font-size:11px; text-transform:uppercase; letter-spacing:0.6px; color:var(--ink-soft); }
+.field label{ font-size:11px; letter-spacing:0.1px; color:var(--ink-soft); font-weight:500; }
 .field input, .field select, .field textarea{
-  font-family:'IBM Plex Mono', monospace; font-size:13px; padding: 8px 10px; border:1px solid var(--line);
-  border-radius:4px; background:#fff; color: var(--ink); min-width: 110px;
+  font-family:'IBM Plex Mono', monospace; font-size:13.5px; padding: 9px 10px; border:1px solid var(--line);
+  border-radius:var(--radius-sm); background: var(--paper-2); color: var(--ink); min-width: 110px;
 }
-.field textarea{ font-family:'Inter',sans-serif; min-width:220px; }
+.field select{
+  appearance:none; -webkit-appearance:none; -moz-appearance:none; cursor:pointer;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6'><path d='M0 0l5 6 5-6z' fill='%238A8A8E'/></svg>");
+  background-repeat:no-repeat; background-position: right 10px center; background-size:10px 6px;
+  padding-right:26px;
+}
+.recalc-btn{ display:block; width:100%; margin-top:14px; background:var(--blue); color:#fff; font-size:14.5px; font-weight:700;
+  padding:13px; border:none; border-radius:var(--radius-sm); box-shadow:0 6px 16px -6px rgba(0,122,255,0.55); letter-spacing:0.1px; }
+.recalc-btn:hover{ opacity:0.92; }
+.recalc-btn:active{ transform:scale(0.99); }
+.field input:focus, .field select:focus, .field textarea:focus{ outline:none; border-color:var(--blue); background:#fff; }
+.field textarea{ font-family:-apple-system, BlinkMacSystemFont, 'Inter',sans-serif; min-width:220px; }
 .field.grow{ flex:1; min-width:200px; }
 .pair{ display:flex; gap:6px; }
 .pair input{ width:100px; }
 .pair select{ min-width:74px; }
-.mode-toggle{ display:flex; gap:0; border:1px solid var(--line); border-radius:4px; overflow:hidden; }
-.mode-toggle button{ border:none; background:#fff; padding:8px 14px; font-size:12px; color:var(--ink-soft); }
-.mode-toggle button.on{ background:var(--ink); color:var(--paper); }
+.mode-toggle{ display:flex; gap:2px; background:rgba(120,120,128,0.14); border-radius:var(--radius-sm); padding:2px; overflow:hidden; }
+.mode-toggle button{ border:none; background:transparent; border-radius:8px; padding:8px 14px; font-size:12px; font-weight:600; color:var(--ink-soft); }
+.mode-toggle button.on{ background:var(--paper); color:var(--ink); box-shadow:0 1px 3px rgba(0,0,0,0.12); }
 table{ width:100%; border-collapse:collapse; margin-top:16px; font-size:12.5px; }
-thead th{ text-align:left; font-size:10.5px; text-transform:uppercase; letter-spacing:0.6px; color: var(--ink-soft); border-bottom:1px solid var(--line); padding: 6px 8px; }
-tbody td{ padding: 10px 8px; border-bottom:1px dashed var(--line); vertical-align:top; }
-tbody tr:hover{ background: rgba(184,137,43,0.06); }
+thead th{ text-align:left; font-size:10.5px; text-transform:uppercase; letter-spacing:0.5px; color: var(--ink-soft); border-bottom:1px solid var(--line); padding: 6px 8px; }
+tbody td{ padding: 11px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+tbody tr:hover{ background: rgba(0,122,255,0.05); }
 .mono{ font-family:'IBM Plex Mono', monospace; }
 .muted{ color:var(--ink-soft); font-size:12px; }
-.badge{ display:inline-block; padding:3px 9px; border-radius:20px; font-size:10.5px; font-weight:600; letter-spacing:0.3px; text-transform:uppercase; border:1px solid transparent; }
-.badge.st-deposit{ background:rgba(165,49,31,0.10); color:var(--stamp-dark); border-color:rgba(165,49,31,0.25);}
-.badge.st-ordered{ background:rgba(184,137,43,0.14); color:#7d5f1d; border-color:rgba(184,137,43,0.3);}
-.badge.st-transit{ background:rgba(184,137,43,0.14); color:#7d5f1d; border-color:rgba(184,137,43,0.3);}
-.badge.st-arrived{ background:rgba(47,107,94,0.10); color:var(--jade-dark); border-color:rgba(47,107,94,0.25);}
-.badge.st-delivered{ background:rgba(47,107,94,0.18); color:var(--jade-dark); border-color:rgba(47,107,94,0.35);}
-.badge.st-cancelled{ background:rgba(38,32,25,0.08); color:var(--ink-soft); border-color:var(--line);}
+.badge{ display:inline-block; padding:3px 9px; border-radius:20px; font-size:10.5px; font-weight:600; letter-spacing:0.2px; border:1px solid transparent; }
+.badge.st-deposit{ background:rgba(255,59,48,0.10); color:var(--stamp-dark); border-color:rgba(255,59,48,0.2);}
+.badge.st-ordered{ background:rgba(255,149,0,0.14); color:var(--gold-dark); border-color:rgba(255,149,0,0.28);}
+.badge.st-transit{ background:rgba(255,149,0,0.14); color:var(--gold-dark); border-color:rgba(255,149,0,0.28);}
+.badge.st-arrived{ background:rgba(52,199,89,0.12); color:var(--jade-dark); border-color:rgba(52,199,89,0.25);}
+.badge.st-delivered{ background:rgba(52,199,89,0.20); color:var(--jade-dark); border-color:rgba(52,199,89,0.35);}
+.badge.st-cancelled{ background:rgba(120,120,128,0.12); color:var(--ink-soft); border-color:var(--line);}
 .card-empty{ padding: 34px 10px; text-align:center; color:var(--ink-soft); font-size:13px; border: 1px dashed var(--line); border-radius:var(--radius); margin-top:14px; }
 .calc-grid{ display:grid; grid-template-columns: 1.3fr 1fr; gap:26px; margin-top:10px; }
 @media (max-width: 760px){ .calc-grid{ grid-template-columns:1fr; } .stats{ grid-template-columns: 1fr 1fr; } }
-.result{ background: var(--paper-2); border:1px solid var(--line); border-radius: var(--radius); padding: 18px 20px; position:sticky; top:16px; }
-.result .line{ display:flex; justify-content:space-between; padding:7px 0; border-bottom:1px dashed var(--line); font-size:12.5px;}
+.result{ background: var(--paper-2); border:none; border-radius: var(--radius); padding: 18px 20px; position:sticky; top:16px; }
+.result .line{ display:flex; justify-content:space-between; padding:7px 0; border-bottom:1px solid var(--line); font-size:12.5px;}
 .result .line:last-child{ border-bottom:none; }
 .result .line.total{ font-weight:700; font-size:15px; padding-top:12px; }
 .result .line .v{ font-family:'IBM Plex Mono', monospace; }
-.toast{ position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background: var(--ink); color:var(--paper);
-  padding:10px 18px; border-radius:5px; font-size:13px; opacity:0; pointer-events:none; transition: opacity .25s ease, transform .25s ease; z-index: 50; }
+.toast{ position:fixed; bottom:calc(20px + env(safe-area-inset-bottom)); left:50%; transform:translateX(-50%); background: rgba(28,28,30,0.92); backdrop-filter: blur(10px); color:#fff;
+  padding:11px 18px; border-radius:12px; font-size:13px; opacity:0; pointer-events:none; transition: opacity .25s ease, transform .25s ease; z-index: 50; max-width:88vw; text-align:center; }
 .toast.show{ opacity:1; transform:translateX(-50%) translateY(-4px); }
-.icon-btn{ background:none; border:none; color:var(--ink-soft); font-size:14px; padding:2px 4px; }
-.icon-btn:hover{ color: var(--stamp); }
-.loading{ color: rgba(247,242,228,0.7); text-align:center; padding: 40px; font-family:'IBM Plex Mono', monospace; font-size:13px;}
-.info-box{ background:rgba(47,107,94,0.08); border:1px solid rgba(47,107,94,0.25); border-radius:var(--radius); padding:14px 16px; font-size:12.5px; color:var(--jade-dark); margin-bottom:16px; }
+.icon-btn{ background:none; border:none; color:var(--ink-soft); font-size:14px; padding:6px; min-width:30px; min-height:30px; }
+.icon-btn:hover{ color: var(--blue); }
+.loading{ color: var(--ink-soft); text-align:center; padding: 40px; font-family:'IBM Plex Mono', monospace; font-size:13px;}
+.info-box{ background:rgba(52,199,89,0.08); border:1px solid rgba(52,199,89,0.2); border-radius:var(--radius); padding:14px 16px; font-size:12.5px; color:var(--jade-dark); margin-bottom:16px; }
 .rate-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:12px; margin-top:8px; }
-.rate-item{ background:#fff; border:1px solid var(--line); border-radius:4px; padding:10px 12px; }
+.rate-item{ background: var(--paper-2); border:none; border-radius:var(--radius-sm); padding:10px 12px; }
 .rate-item label{ font-size:10.5px; color:var(--ink-soft); text-transform:uppercase; }
-.rate-item input{ width:100%; margin-top:4px; }
+.rate-item input{ width:100%; margin-top:4px; background:#fff; }
 .rate-note{ font-size:11px; color:var(--jade-dark); margin-top:4px; font-family:'IBM Plex Mono', monospace; }
 .priced-note{ font-size:10.5px; color:var(--ink-soft); margin-top:2px; }
-.formula-box{ background:rgba(184,137,43,0.08); border:1px solid rgba(184,137,43,0.3); border-radius:var(--radius); padding:14px 16px; font-size:12.5px; color:#7d5f1d; margin-bottom:16px; }
-.formula-box .f-line{ font-family:'IBM Plex Mono', monospace; font-size:12px; margin-top:6px; color:#5c451a; }
+.formula-box{ background:rgba(255,149,0,0.08); border:1px solid rgba(255,149,0,0.25); border-radius:var(--radius); padding:14px 16px; font-size:12.5px; color:var(--gold-dark); margin-bottom:16px; }
+.formula-box .f-line{ font-family:'IBM Plex Mono', monospace; font-size:12px; margin-top:6px; color:#7A4B00; }
 .section-hint{ font-size:11px; color:var(--ink-soft); font-style:italic; margin:-4px 0 8px; }
 .formula-hint{ font-size:10.5px; color:var(--ink-soft); margin-top:2px; font-family:'IBM Plex Mono', monospace; line-height:1.4; }
-.result .line-wrap{ padding:7px 0; border-bottom:1px dashed var(--line); }
+.result .line-wrap{ padding:7px 0; border-bottom:1px solid var(--line); }
 .result .line-wrap:last-child{ border-bottom:none; }
 .result .line-wrap .line{ padding:0; border-bottom:none; }
+.profit-pos{ color: var(--jade-dark); font-weight:600; }
+.profit-neg{ color: var(--stamp-dark); font-weight:600; }
+.price-compare{ background: var(--paper-2); border:none; border-radius:var(--radius-sm); padding:10px 12px; margin-top:8px; font-size:12px; }
+.price-compare .pc-row{ display:flex; justify-content:space-between; padding:3px 0; }
+.price-compare .pc-row.total{ border-top:1px solid var(--line); margin-top:4px; padding-top:7px; font-weight:700; }
 .cargo-list{ display:flex; flex-direction:column; gap:6px; margin-top:8px; }
-.cargo-row{ display:flex; align-items:center; justify-content:space-between; background:#fff; border:1px solid var(--line); border-radius:4px; padding:8px 12px; font-size:12.5px; }
+.cargo-row{ display:flex; align-items:center; justify-content:space-between; background: var(--paper-2); border:none; border-radius:var(--radius-sm); padding:9px 12px; font-size:12.5px; gap:8px; }
 .mode-toggle button:disabled{ opacity:0.4; cursor:not-allowed; }
 .hidden{ display:none !important; }
-.login-wrap{ max-width: 380px; margin: 90px auto; }
-.login-card{ background: var(--paper); border:1px solid var(--line); border-radius: var(--radius); padding: 30px 28px; box-shadow: 0 18px 40px -20px rgba(0,0,0,0.6); }
-.login-card h1{ font-family:'Special Elite', monospace; font-size:20px; margin:0 0 4px; }
+.login-wrap{ max-width: 380px; margin: 90px auto; padding: 0 6px; }
+.login-card{ background: var(--paper); border:none; border-radius: 20px; padding: 30px 28px; box-shadow: var(--shadow); }
+.login-card h1{ font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif; font-weight:700; font-size:21px; letter-spacing:-0.3px; margin:0 0 4px; }
 .login-card .sub{ font-size:12.5px; color:var(--ink-soft); margin-bottom:20px; }
 .login-card .field{ margin-bottom:12px; }
 .login-card .field input{ width:100%; }
 .login-err{ color: var(--stamp-dark); font-size:12.5px; margin-top:10px; min-height:16px; }
-.sync-pill{ font-family:'IBM Plex Mono', monospace; font-size:10.5px; letter-spacing:0.4px; padding:3px 10px; border-radius:20px; display:inline-flex; align-items:center; gap:6px; border:1px solid var(--line); color:var(--ink-soft); background:var(--paper);}
+.sync-pill{ font-family:'IBM Plex Mono', monospace; font-size:10.5px; letter-spacing:0.3px; padding:4px 10px; border-radius:20px; display:inline-flex; align-items:center; gap:6px; border:none; color:var(--ink-soft); background:rgba(120,120,128,0.12);}
 .sync-pill .dot{ width:7px; height:7px; border-radius:50%; background:var(--ink-soft); }
 .sync-pill.on .dot{ background: var(--jade); }
 .sync-pill.err .dot{ background: var(--stamp); }
 .sync-pill.busy .dot{ background: var(--gold); }
+
+/* ---------------- mobile optimization (iPhone 14 Pro Max, Redmi K30 4G, and similar) ---------------- */
+@media (max-width: 600px){
+  body{ padding: 16px 10px calc(50px + env(safe-area-inset-bottom)); }
+  .letterhead{ flex-direction:column; align-items:flex-start; padding:16px 16px; gap:10px; }
+  .letterhead .stamp{ order:-2; width:44px; height:44px; border-radius:12px; font-size:17px; }
+  .letterhead .brandrow{ order:-1; }
+  .stats{ grid-template-columns: 1fr 1fr; gap:8px; margin-top:12px; }
+  .stat{ padding:11px 12px; }
+  .stat .value{ font-size:15.5px; }
+  .tabs{ flex-wrap:nowrap; overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none; margin-top:16px; }
+  .tabs::-webkit-scrollbar{ display:none; }
+  .tab{ flex:0 0 auto; padding:9px 12px; font-size:12px; white-space:nowrap; }
+  .panel{ padding:16px 14px 20px; margin-top:10px; }
+  .panel h2{ font-size:17px; }
+  .row{ gap:8px; }
+  .field{ flex:1 1 100%; min-width:0; }
+  .field.grow{ min-width:0; flex-basis:100%; }
+  .field input, .field select, .field textarea{ font-size:16px; min-width:0; width:100%; } /* 16px avoids iOS auto-zoom on focus */
+  .pair{ flex-wrap:nowrap; width:100%; }
+  .pair input{ width:auto; flex:1 1 auto; min-width:0; }
+  .pair select{ min-width:0; flex:0 1 40%; }
+  .mode-toggle{ width:100%; }
+  .mode-toggle button{ flex:1; padding:9px 6px; font-size:11.5px; text-align:center; white-space:nowrap; }
+  table{ display:block; width:100%; overflow-x:auto; -webkit-overflow-scrolling:touch; border-radius:10px; }
+  thead th, tbody td{ white-space:nowrap; }
+  .result{ position:static; margin-top:18px; }
+  .calc-grid{ gap:18px; }
+  .btn{ min-height:42px; }
+  .btn.small{ min-height:36px; }
+  .login-wrap{ margin: 50px auto; }
+  .login-card{ padding:24px 20px; }
+  .rate-grid{ grid-template-columns: repeat(auto-fill,minmax(130px,1fr)); }
+  .cargo-row{ flex-wrap:wrap; }
+  #cr_name, #cr_amt, #cr_cur{ width:100%; }
+}
+@supports (padding: max(0px)){
+  body{
+    padding-left: max(10px, env(safe-area-inset-left));
+    padding-right: max(10px, env(safe-area-inset-right));
+  }
+}
 </style>
 </head>
 <body>
@@ -171,6 +239,42 @@ tbody tr:hover{ background: rgba(184,137,43,0.06); }
 <div class="toast" id="toast"></div>
 
 <script>
+/* ---------------- PWA: generate app icon + manifest (so it can be Added to Home Screen on iOS) ---------------- */
+(function setupPWA(){
+  try{
+    const c = document.createElement('canvas'); c.width = 512; c.height = 512;
+    const ctx = c.getContext('2d');
+    const g = ctx.createLinearGradient(0,0,512,512);
+    g.addColorStop(0,'#0A84FF'); g.addColorStop(1,'#0051D5');
+    // iOS icon mask handles rounding itself, but round here too for browsers that show it raw (e.g. Android/desktop favicon)
+    const r = 110;
+    ctx.beginPath();
+    ctx.moveTo(r,0); ctx.arcTo(512,0,512,512,r); ctx.arcTo(512,512,0,512,r); ctx.arcTo(0,512,0,0,r); ctx.arcTo(0,0,512,0,r);
+    ctx.closePath(); ctx.fillStyle = g; ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.font = '700 300px -apple-system, BlinkMacSystemFont, Inter, sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('L', 256, 290);
+    const iconUrl = c.toDataURL('image/png');
+    const favicon = document.getElementById('favicon'); if(favicon) favicon.href = iconUrl;
+    const touchIcon = document.getElementById('appleTouchIcon'); if(touchIcon) touchIcon.href = iconUrl;
+
+    const manifest = {
+      name: 'Ledger — Order & Cash Ledger',
+      short_name: 'Ledger',
+      start_url: '.',
+      display: 'standalone',
+      background_color: '#F2F2F7',
+      theme_color: '#F2F2F7',
+      icons: [
+        { src: iconUrl, sizes: '512x512', type: 'image/png', purpose: 'any maskable' }
+      ]
+    };
+    const blob = new Blob([JSON.stringify(manifest)], {type:'application/json'});
+    const manifestEl = document.getElementById('webManifest');
+    if(manifestEl) manifestEl.href = URL.createObjectURL(blob);
+  }catch(e){ console.warn('PWA icon/manifest setup skipped', e); }
+})();
+
 /* ---------------- firebase ---------------- */
 const firebaseConfig = {
   apiKey: "AIzaSyCkMQAXomI2WosRseNgKuzozweso_tL8GY",
@@ -436,17 +540,17 @@ function costFormHtml(prefix, f){
     <h3 class="section">Pricing</h3>
     <div class="section-hint">Markup is added on top of the full Landed Cost (item + all shipping + agent fee)</div>
     <div class="row">
-      <div class="field"><label>Margin Type</label>
+      <div class="field"><label>Markup Type</label>
         <div class="mode-toggle" id="${prefix}_marginModeToggle">
-          <button type="button" data-mode="percent" class="${marginMode==='percent'?'on':''}">% Margin</button>
+          <button type="button" data-mode="percent" class="${marginMode==='percent'?'on':''}">% Markup</button>
           <button type="button" data-mode="flat" class="${marginMode==='flat'?'on':''}">+ Fixed Profit (Ks)</button>
         </div>
         <input type="hidden" id="${prefix}_marginMode" value="${marginMode}">
       </div>
-      <div class="field ${marginMode==='percent'?'':'hidden'}" id="${prefix}_marginPctWrap"><label>Margin %</label><input id="${prefix}_margin" type="number" value="${f.marginPct!=null?f.marginPct:STATE.settings.marginPct}" style="width:90px;"></div>
+      <div class="field ${marginMode==='percent'?'':'hidden'}" id="${prefix}_marginPctWrap"><label>Markup %</label><input id="${prefix}_margin" type="number" value="${f.marginPct!=null?f.marginPct:STATE.settings.marginPct}" style="width:90px;"></div>
       <div class="field ${marginMode==='flat'?'':'hidden'}" id="${prefix}_marginFlatWrap"><label>Profit / Unit (Ks)</label><input id="${prefix}_marginFlat" type="number" value="${f.marginFlatMMK||0}" style="width:120px;"></div>
-      <div class="field"><button type="button" class="btn ghost small" id="${prefix}_recalc">Recalculate →</button></div>
     </div>
+    <button type="button" class="btn recalc-btn" id="${prefix}_recalc">↻ Recalculate</button>
     ${f.pricedAt ? `<div class="priced-note">Last priced ${f.pricedAt} using that day's exchange rates. Recalculate uses today's rates — Save to lock them in.</div>` : ''}
   `;
 }
@@ -557,7 +661,7 @@ function render(){
         <div class="sync-pill on" id="syncPill"><span class="dot"></span><span class="txt">Synced</span></div>
         <button class="btn ghost small" id="logoutBtn" type="button">Sign out</button>
       </div>
-      <div class="stamp">PAID<br>&amp; SEALED<br>★ ★ ★</div>
+      <div class="stamp">${escapeHtml((s.businessName||'L').trim().charAt(0).toUpperCase()||'L')}</div>
     </div>
     <div class="stats">
       <div class="stat accent-jade"><div class="label">Deposits Collected</div><div class="value">${fmtMMK(depositsCollected)}</div></div>
@@ -781,27 +885,38 @@ function blankProduct(){
     cost: lastUsedCost(),
     landedCostMMK:0, sellPriceMMK:0 };
 }
-function renderProducts(panel){
-  panel.innerHTML = `
-    <h2>Products (Market List)</h2>
-    <div class="sub">Price something once, save it here, and reuse it on every future order without recalculating.</div>
-    <div class="row" style="margin-bottom:6px;"><button class="btn stamp small" id="newProdBtn">+ New Product</button></div>
-    <div id="prodFormHolder"></div>
-    ${STATE.products.length ? `
-      <table><thead><tr><th>Code</th><th>Name</th><th>Category</th><th>Landed Cost</th><th>Sell Price</th><th>Notes</th><th></th></tr></thead>
-      <tbody>${STATE.products.map(p=>`
-        <tr data-id="${p.id}">
-          <td class="mono">${escapeHtml(p.code)||'—'}</td>
-          <td>${escapeHtml(p.name)}</td>
-          <td class="muted">${escapeHtml(p.category)||'—'}</td>
-          <td class="mono">${fmtMMK(p.landedCostMMK)}${p.cost&&p.cost.pricedAt?`<div class="priced-note">as of ${p.cost.pricedAt}</div>`:''}</td>
-          <td class="mono">${fmtMMK(p.sellPriceMMK)}</td>
-          <td class="muted">${escapeHtml(p.notes)||''}</td>
-          <td><button class="icon-btn refresh-prod" title="Reprice with today's exchange rate">↻</button><button class="icon-btn edit-prod" title="Edit">✎</button><button class="icon-btn del-prod" title="Delete">✕</button></td>
-        </tr>`).join('')}</tbody></table>
-    ` : `<div class="card-empty">No products saved yet.</div>`}
-  `;
-  document.getElementById('newProdBtn').addEventListener('click', ()=> showProductForm(blankProduct()));
+let PROD_SEARCH = '';
+function filteredProducts(){
+  const q = PROD_SEARCH.trim().toLowerCase();
+  if(!q) return STATE.products;
+  return STATE.products.filter(p=>
+    (p.name||'').toLowerCase().includes(q) ||
+    (p.code||'').toLowerCase().includes(q) ||
+    (p.category||'').toLowerCase().includes(q)
+  );
+}
+function productsTableHtml(){
+  const list = filteredProducts();
+  if(!list.length) return `<div class="card-empty">${PROD_SEARCH ? 'No products match your search.' : 'No products saved yet.'}</div>`;
+  return `<table><thead><tr><th>Code</th><th>Name</th><th>Category</th><th>Landed Cost</th><th>Actual Sell Price</th><th>Profit / Unit</th><th>Notes</th><th></th></tr></thead>
+    <tbody>${list.map(p=>{
+      const profit = Number(p.sellPriceMMK||0) - Number(p.landedCostMMK||0);
+      const profitCls = profit>=0 ? 'profit-pos' : 'profit-neg';
+      const profitSign = profit>=0 ? '+' : '−';
+      const pct = p.landedCostMMK ? (Math.abs(profit)/p.landedCostMMK*100).toFixed(1) : '0.0';
+      return `
+      <tr data-id="${p.id}">
+        <td class="mono">${escapeHtml(p.code)||'—'}</td>
+        <td>${escapeHtml(p.name)}</td>
+        <td class="muted">${escapeHtml(p.category)||'—'}</td>
+        <td class="mono">${fmtMMK(p.landedCostMMK)}${p.cost&&p.cost.pricedAt?`<div class="priced-note">as of ${p.cost.pricedAt}</div>`:''}</td>
+        <td class="mono">${fmtMMK(p.sellPriceMMK)}</td>
+        <td class="mono ${profitCls}">${profitSign}${fmtMMK(Math.abs(profit))}<div class="priced-note">${profit>=0?'profitted':'losing'} ${pct}% of landed cost</div></td>
+        <td class="muted">${escapeHtml(p.notes)||''}</td>
+        <td><button class="icon-btn refresh-prod" title="Reprice with today's exchange rate">↻</button><button class="icon-btn edit-prod" title="Edit">✎</button><button class="icon-btn del-prod" title="Delete">✕</button></td>
+      </tr>`;}).join('')}</tbody></table>`;
+}
+function wireProductTableEvents(){
   document.querySelectorAll('.edit-prod').forEach(btn=>{
     btn.addEventListener('click', e=>{ const id=e.target.closest('tr').dataset.id; const p=STATE.products.find(x=>x.id===id); if(p) showProductForm(p); });
   });
@@ -814,9 +929,30 @@ function renderProducts(panel){
       if(!confirm('Delete this product from the catalog?')) return;
       STATE.products = STATE.products.filter(p=>p.id!==id);
       await sSet('products', STATE.products); toast('Product deleted');
-      renderProducts(document.getElementById('panel'));
+      document.getElementById('prodTableWrap').innerHTML = productsTableHtml();
+      wireProductTableEvents();
     });
   });
+}
+function renderProducts(panel){
+  panel.innerHTML = `
+    <h2>Products (Market List)</h2>
+    <div class="sub">Price something once, save it here, and reuse it on every future order without recalculating.</div>
+    <div class="row" style="margin-bottom:6px; justify-content:space-between;">
+      <button class="btn stamp small" id="newProdBtn">+ New Product</button>
+      <div class="field" style="min-width:200px;"><input id="prodSearch" placeholder="Search name, code, category…" value="${escapeAttr(PROD_SEARCH)}"></div>
+    </div>
+    <div id="prodFormHolder"></div>
+    <div id="prodTableWrap">${productsTableHtml()}</div>
+  `;
+  document.getElementById('newProdBtn').addEventListener('click', ()=> showProductForm(blankProduct()));
+  const searchInput = document.getElementById('prodSearch');
+  searchInput.addEventListener('input', e=>{
+    PROD_SEARCH = e.target.value;
+    document.getElementById('prodTableWrap').innerHTML = productsTableHtml();
+    wireProductTableEvents();
+  });
+  wireProductTableEvents();
 }
 function showProductForm(p){
   const holder = document.getElementById('prodFormHolder');
@@ -828,15 +964,40 @@ function showProductForm(p){
         <div class="field"><label>Category</label><input id="p_category" value="${escapeAttr(p.category)}" style="width:140px;"></div>
       </div>
       ${costFormHtml('pc', p.cost)}
-      <div class="row"><div class="field"><label>Sell Price (MMK)</label><input id="pc_sell" type="number" value="${p.sellPriceMMK||0}" style="width:150px;"></div></div>
+      <h3 class="section">Actual Sell Price</h3>
+      <div class="section-hint">What you really charge the customer — not necessarily the Suggested Price above. Profit is measured against this number.</div>
+      <div class="row">
+        <div class="field"><label>Actual Sell Price (MMK)</label><input id="pc_sell" type="number" value="${p.sellPriceMMK||0}" style="width:150px;"></div>
+        <div class="field"><button type="button" class="btn ghost small" id="pc_useSuggested">Use Suggested Price →</button></div>
+      </div>
+      <div class="price-compare" id="pc_priceCompare"></div>
       <div class="row" style="margin-top:10px;"><div class="field grow"><label>Notes</label><textarea id="p_notes" rows="2">${escapeHtml(p.notes)}</textarea></div></div>
       <div class="row" style="margin-top:16px;"><button class="btn stamp" id="p_save">Save Product</button><button class="btn ghost" id="p_cancel">Cancel</button></div>
     </div>
   `;
-  wireCostForm('pc', ()=>{
+  const updatePriceCompare = ()=>{
     const f = readCostForm('pc'); const r = computeLanded(f);
-    const perUnit = r.landed/(f.qty||1);
-    document.getElementById('pc_sell').value = Math.round(computeSell(perUnit, f));
+    const perUnitLanded = r.landed/(f.qty||1);
+    const suggested = computeSell(perUnitLanded, f);
+    const actual = parseFloat(document.getElementById('pc_sell').value)||0;
+    const profit = actual - perUnitLanded;
+    const profitCls = profit>=0 ? 'profit-pos' : 'profit-neg';
+    const profitSign = profit>=0 ? '+' : '−';
+    document.getElementById('pc_priceCompare').innerHTML = `
+      <div class="pc-row"><span>Landed Cost (per unit)</span><span class="mono">${fmtMMK(perUnitLanded)}</span></div>
+      <div class="pc-row"><span>Suggested Price</span><span class="mono">${fmtMMK(suggested)}</span></div>
+      <div class="pc-row"><span>Actual Sell Price</span><span class="mono">${fmtMMK(actual)}</span></div>
+      <div class="pc-row total"><span>Profit / Unit (Actual − Landed)</span><span class="mono ${profitCls}">${profitSign}${fmtMMK(Math.abs(profit))}</span></div>
+    `;
+    return {perUnitLanded, suggested};
+  };
+  wireCostForm('pc', updatePriceCompare);
+  updatePriceCompare();
+  document.getElementById('pc_sell').addEventListener('input', updatePriceCompare);
+  document.getElementById('pc_useSuggested').addEventListener('click', ()=>{
+    const {suggested} = updatePriceCompare();
+    document.getElementById('pc_sell').value = Math.round(suggested);
+    updatePriceCompare();
   });
   document.getElementById('p_cancel').addEventListener('click', ()=> holder.innerHTML='');
   document.getElementById('p_save').addEventListener('click', async ()=>{
@@ -863,17 +1024,19 @@ async function refreshProductRate(id){
   const p = STATE.products.find(x=>x.id===id); if(!p) return;
   const r = computeLanded(p.cost);
   const perUnitLanded = r.landed/(p.cost.qty||1);
-  const sell = computeSell(perUnitLanded, p.cost);
+  // Only the Landed Cost moves with today's rates — Actual Sell Price is what you
+  // really charge, so it's left alone here; re-price it yourself if the margin needs adjusting.
   p.landedCostMMK = perUnitLanded;
-  p.sellPriceMMK = sell;
   p.cost = Object.assign({}, p.cost, { ratesSnapshot: Object.assign({}, STATE.settings.rates), pricedAt: new Date().toISOString().slice(0,10) });
   await sSet('products', STATE.products);
-  toast('Repriced with today\'s exchange rate');
+  toast('Landed cost repriced — Actual Sell Price left as-is');
   renderProducts(document.getElementById('panel'));
 }
 
 /* ---------------- pricing calculator (scratchpad) ---------------- */
+let CALC_ACTUAL_TOUCHED = false;
 function renderPricing(panel){
+  const startCost = lastUsedCost();
   panel.innerHTML = `
     <h2>Pricing Calculator</h2>
     <div class="sub">A scratchpad for "what if" pricing. Save the result straight to Products when you're happy with it — no need to redo the math on the order form later.</div>
@@ -884,8 +1047,14 @@ function renderPricing(panel){
       <div class="f-line">Profit / Unit = Actual Sell Price − Landed Cost</div>
     </div>
     <div class="calc-grid">
-      <div>${costFormHtml('calc', null)}
-        <div class="row" style="margin-top:6px;"><div class="field grow"><label>Save as Product — Name</label><input id="calc_name" placeholder="e.g. Rhode Peptide Lip Tint"></div>
+      <div>${costFormHtml('calc', startCost)}
+        <h3 class="section">Actual Sale Price</h3>
+        <div class="section-hint">Defaults to the Suggested Price below. Edit it if you're actually selling for something else — it'll stop auto-updating once you do.</div>
+        <div class="row">
+          <div class="field"><label>Actual Sale Price (MMK)</label><input id="calc_actual" type="number" value="0" style="width:150px;"></div>
+          <div class="field"><button type="button" class="btn ghost small" id="calc_useSuggested">Use Suggested Price →</button></div>
+        </div>
+        <div class="row" style="margin-top:14px;"><div class="field grow"><label>Save as Product — Name</label><input id="calc_name" placeholder="e.g. Rhode Peptide Lip Tint"></div>
         <div class="field"><label>Code</label><input id="calc_code" style="width:110px;"></div></div>
         <div class="row" style="margin-top:14px;"><button class="btn jade" id="calc_saveProd">Save as Product →</button></div>
       </div>
@@ -897,19 +1066,26 @@ function renderPricing(panel){
         <div class="line"><span>Agent Fee</span><span class="v">—</span></div>
         <div class="line"><span>Landed Cost (per unit)</span><span class="v">—</span></div>
         <div class="line total"><span>Suggested Price</span><span class="v">—</span></div>
+        <div class="line"><span>Actual Sale Price</span><span class="v">—</span></div>
         <div class="line"><span>Profit per Unit</span><span class="v">—</span></div>
       </div>
     </div>
   `;
+  CALC_ACTUAL_TOUCHED = false;
   const calc = ()=>{
     const f = readCostForm('calc'); const r = computeLanded(f);
     const perUnitLanded = r.landed/(f.qty||1);
-    const price = computeSell(perUnitLanded, f);
+    const suggested = computeSell(perUnitLanded, f);
+    if(!CALC_ACTUAL_TOUCHED){ document.getElementById('calc_actual').value = Math.round(suggested); }
+    const actual = parseFloat(document.getElementById('calc_actual').value)||0;
+    const profit = actual - perUnitLanded;
+    const profitCls = profit>=0 ? 'profit-pos' : 'profit-neg';
+    const profitSign = profit>=0 ? '+' : '−';
     const rate = STATE.settings.rates[f.unitCost.cur]||1;
     const agentHint = f.agentMode==='flat'
       ? `Flat fee: ${fmt2(f.agentFlat.amt)} ${f.agentFlat.cur} → Ks`
       : `${f.agentPct||0}% × (Item Cost + Int'l Shipping in Ks)`;
-    const marginHint = f.marginMode==='flat'
+    const markupHint = f.marginMode==='flat'
       ? `Landed Cost + ${fmtMMK(f.marginFlatMMK)} fixed profit`
       : `Landed Cost × (1 + ${f.marginPct||0}%)`;
     document.getElementById('calc_result').innerHTML = `
@@ -925,15 +1101,20 @@ function renderPricing(panel){
         <div class="formula-hint">${agentHint} = ${fmtMMK(r.agentMMK)}</div></div>
       <div class="line-wrap"><div class="line total"><span>Landed Cost (per unit)</span><span class="v">${fmtMMK(perUnitLanded)}</span></div>
         <div class="formula-hint">(${fmtMMK(r.itemMMK)} + ${fmtMMK(r.intlMMK)} + ${fmtMMK(r.agentMMK)} + ${fmtMMK(r.domMMK)} + ${fmtMMK(r.lastMMK)}) ÷ ${f.qty||1} qty</div></div>
-      <div class="line-wrap"><div class="line total"><span>Suggested Price</span><span class="v">${fmtMMK(price)}</span></div>
-        <div class="formula-hint">${marginHint} = ${fmtMMK(price)}</div></div>
-      <div class="line-wrap"><div class="line"><span>Suggested Profit / Unit</span><span class="v">${fmtMMK(price-perUnitLanded)}</span></div>
-        <div class="formula-hint">${fmtMMK(price)} − ${fmtMMK(perUnitLanded)} landed = ${fmtMMK(price-perUnitLanded)}</div></div>
+      <div class="line-wrap"><div class="line total"><span>Suggested Price</span><span class="v">${fmtMMK(suggested)}</span></div>
+        <div class="formula-hint">${markupHint} = ${fmtMMK(suggested)}</div></div>
+      <div class="line-wrap"><div class="line"><span>Actual Sale Price</span><span class="v">${fmtMMK(actual)}</span></div>
+        <div class="formula-hint">${CALC_ACTUAL_TOUCHED ? 'Set by you — no longer follows Suggested Price' : 'Following Suggested Price (edit above to override)'}</div></div>
+      <div class="line-wrap"><div class="line"><span>Profit / Unit (Actual − Landed)</span><span class="v ${profitCls}">${profitSign}${fmtMMK(Math.abs(profit))}</span></div>
+        <div class="formula-hint">${fmtMMK(actual)} − ${fmtMMK(perUnitLanded)} landed = ${profitSign}${fmtMMK(Math.abs(profit))}</div></div>
     `;
-    return {perUnitLanded, price};
+    rememberLastUsed(f, null);
+    return {perUnitLanded, suggested, actual};
   };
   wireCostForm('calc', calc);
   calc();
+  document.getElementById('calc_actual').addEventListener('input', ()=>{ CALC_ACTUAL_TOUCHED = true; calc(); });
+  document.getElementById('calc_useSuggested').addEventListener('click', ()=>{ CALC_ACTUAL_TOUCHED = false; calc(); });
   document.getElementById('calc_saveProd').addEventListener('click', async ()=>{
     const name = document.getElementById('calc_name').value.trim();
     if(!name){ toast('Give the product a name first'); return; }
@@ -941,7 +1122,7 @@ function renderPricing(panel){
     f.ratesSnapshot = Object.assign({}, STATE.settings.rates);
     f.pricedAt = new Date().toISOString().slice(0,10);
     const product = { id:uid(), code: document.getElementById('calc_code').value.trim(), name, category:'', notes:'',
-      cost:f, landedCostMMK: res.perUnitLanded, sellPriceMMK: res.price };
+      cost:f, landedCostMMK: res.perUnitLanded, sellPriceMMK: res.actual };
     STATE.products.push(product);
     rememberLastUsed(f, null);
     await sSet('products', STATE.products);
@@ -1012,7 +1193,7 @@ function renderSettings(panel){
     <h2>Settings</h2>
     <div class="sub">Defaults used across new orders, products, and the pricing calculator.</div>
     <div class="row"><div class="field"><label>Business Name</label><input id="s_name" value="${escapeAttr(s.businessName)}"></div>
-    <div class="field"><label>Default Margin %</label><input id="s_margin" type="number" value="${s.marginPct}" style="width:100px;"></div></div>
+    <div class="field"><label>Default Markup %</label><input id="s_margin" type="number" value="${s.marginPct}" style="width:100px;"></div></div>
     <h3 class="section">Exchange Rates (1 unit = ? MMK)</h3>
     <div class="sub" style="margin-top:-6px;">Change these any time — new orders and products price off whatever is here today. Existing items keep the rate they were priced at until you reprice them.</div>
     <div class="rate-grid">
