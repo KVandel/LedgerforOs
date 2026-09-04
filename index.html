@@ -109,16 +109,34 @@ button{ font-family:-apple-system, BlinkMacSystemFont, 'Inter',sans-serif; curso
   font-family:'IBM Plex Mono', monospace; font-size:13.5px; padding: 9px 10px; border:1px solid var(--line);
   border-radius:var(--radius-sm); background: var(--paper-2); color: var(--ink); min-width: 110px;
 }
-.field select{
-  appearance:none; -webkit-appearance:none; -moz-appearance:none; cursor:pointer;
-  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6'><path d='M0 0l5 6 5-6z' fill='%238A8A8E'/></svg>");
-  background-repeat:no-repeat; background-position: right 10px center; background-size:10px 6px;
-  padding-right:26px;
-}
+.field select{ cursor:pointer; }
 .recalc-btn{ display:block; width:100%; margin-top:14px; background:var(--blue); color:#fff; font-size:14.5px; font-weight:700;
   padding:13px; border:none; border-radius:var(--radius-sm); box-shadow:0 6px 16px -6px rgba(0,122,255,0.55); letter-spacing:0.1px; }
 .recalc-btn:hover{ opacity:0.92; }
 .recalc-btn:active{ transform:scale(0.99); }
+
+/* ---------------- custom animated picker (replaces native <select> popups) ---------------- */
+.csel{ position:relative; display:inline-flex; min-width:110px; vertical-align:top; }
+.csel select{ position:absolute; opacity:0; width:1px; height:1px; pointer-events:none; }
+.csel-btn{ width:100%; text-align:left; display:flex; align-items:center; justify-content:space-between; gap:8px;
+  font-family:'IBM Plex Mono', monospace; font-size:13.5px; padding:9px 10px; border:1px solid var(--line);
+  border-radius:var(--radius-sm); background:var(--paper-2); color:var(--ink); cursor:pointer; }
+.csel-btn:focus{ outline:none; border-color:var(--blue); }
+.csel-btn .csel-label{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.csel-btn .csel-chevron{ color:var(--ink-soft); font-size:10px; flex:0 0 auto; transition:transform .18s ease; }
+.csel.open .csel-btn{ border-color:var(--blue); background:#fff; }
+.csel.open .csel-btn .csel-chevron{ transform:rotate(180deg); }
+.csel-menu{ position:absolute; top:calc(100% + 6px); left:0; min-width:100%; width:max-content; max-width:min(80vw,320px); background:#fff; border-radius:12px;
+  box-shadow:0 14px 34px -10px rgba(0,0,0,0.28), 0 2px 8px rgba(0,0,0,0.08); padding:5px; z-index:60; max-height:240px; overflow-y:auto;
+  opacity:0; transform:translateY(-6px) scale(0.98); pointer-events:none; transition:opacity .15s ease, transform .15s ease; }
+.csel.open .csel-menu{ opacity:1; transform:translateY(0) scale(1); pointer-events:auto; }
+.csel-item{ padding:9px 12px; border-radius:8px; font-size:13.5px; font-family:'IBM Plex Mono', monospace; cursor:pointer;
+  display:flex; align-items:center; justify-content:space-between; gap:10px; color:var(--ink); white-space:nowrap; }
+.csel-item:hover, .csel-item:active{ background:rgba(0,122,255,0.09); }
+.csel-item.sel{ color:var(--blue); font-weight:700; }
+.csel-item.sel::after{ content:'✓'; font-size:12px; }
+.csel-item.empty{ color:var(--ink-soft); cursor:default; }
+.csel-item.empty:hover{ background:transparent; }
 .field input:focus, .field select:focus, .field textarea:focus{ outline:none; border-color:var(--blue); background:#fff; }
 .field textarea{ font-family:-apple-system, BlinkMacSystemFont, 'Inter',sans-serif; min-width:220px; }
 .field.grow{ flex:1; min-width:200px; }
@@ -274,6 +292,72 @@ tbody tr:hover{ background: rgba(0,122,255,0.05); }
     if(manifestEl) manifestEl.href = URL.createObjectURL(blob);
   }catch(e){ console.warn('PWA icon/manifest setup skipped', e); }
 })();
+
+/* ---------------- custom animated picker (auto-replaces every native <select> popup) ---------------- */
+let OPEN_CSEL = null;
+function closeAllCsel(){ if(OPEN_CSEL){ OPEN_CSEL.classList.remove('open'); OPEN_CSEL = null; } }
+document.addEventListener('click', (e)=>{ if(OPEN_CSEL && !OPEN_CSEL.contains(e.target)) closeAllCsel(); }, true);
+document.addEventListener('scroll', ()=> closeAllCsel(), true);
+window.addEventListener('resize', ()=> closeAllCsel());
+function enhanceSelect(sel){
+  if(!sel || sel.dataset.enhanced) return;
+  sel.dataset.enhanced = '1';
+  const wrap = document.createElement('span');
+  wrap.className = 'csel';
+  sel.parentNode.insertBefore(wrap, sel);
+  wrap.appendChild(sel);
+  const btn = document.createElement('button');
+  btn.type = 'button'; btn.className = 'csel-btn';
+  btn.innerHTML = `<span class="csel-label"></span><span class="csel-chevron">▾</span>`;
+  const label = btn.querySelector('.csel-label');
+  const menu = document.createElement('div'); menu.className = 'csel-menu';
+  function syncLabel(){
+    const opt = sel.options[sel.selectedIndex];
+    label.textContent = opt ? opt.textContent : '';
+  }
+  function buildMenu(){
+    menu.innerHTML = '';
+    if(!sel.options.length){
+      const empty = document.createElement('div'); empty.className = 'csel-item empty'; empty.textContent = 'No options yet';
+      menu.appendChild(empty); return;
+    }
+    Array.from(sel.options).forEach((opt,i)=>{
+      const item = document.createElement('div');
+      item.className = 'csel-item' + (i===sel.selectedIndex ? ' sel' : '');
+      item.textContent = opt.textContent;
+      item.addEventListener('click', (e)=>{
+        e.stopPropagation();
+        sel.selectedIndex = i;
+        sel.dispatchEvent(new Event('input', {bubbles:true}));
+        sel.dispatchEvent(new Event('change', {bubbles:true}));
+        syncLabel(); closeAllCsel();
+      });
+      menu.appendChild(item);
+    });
+  }
+  btn.addEventListener('click', (e)=>{
+    e.preventDefault(); e.stopPropagation();
+    if(wrap.classList.contains('open')){ closeAllCsel(); return; }
+    buildMenu(); closeAllCsel();
+    wrap.classList.add('open'); OPEN_CSEL = wrap;
+  });
+  wrap.appendChild(btn); wrap.appendChild(menu);
+  syncLabel();
+}
+function enhanceSelects(root){
+  if(!root || !root.querySelectorAll) return;
+  root.querySelectorAll('select:not([data-enhanced])').forEach(enhanceSelect);
+}
+new MutationObserver(muts=>{
+  muts.forEach(m=>{
+    m.addedNodes.forEach(node=>{
+      if(node.nodeType!==1) return;
+      if(node.matches && node.matches('select')) enhanceSelect(node);
+      else enhanceSelects(node);
+    });
+  });
+}).observe(document.documentElement, {childList:true, subtree:true});
+enhanceSelects(document.body);
 
 /* ---------------- firebase ---------------- */
 const firebaseConfig = {
