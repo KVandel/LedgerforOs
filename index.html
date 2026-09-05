@@ -264,7 +264,6 @@ tbody tr:hover{ background: rgba(0,122,255,0.05); }
     const ctx = c.getContext('2d');
     const g = ctx.createLinearGradient(0,0,512,512);
     g.addColorStop(0,'#0A84FF'); g.addColorStop(1,'#0051D5');
-    // iOS icon mask handles rounding itself, but round here too for browsers that show it raw (e.g. Android/desktop favicon)
     const r = 110;
     ctx.beginPath();
     ctx.moveTo(r,0); ctx.arcTo(512,0,512,512,r); ctx.arcTo(512,512,0,512,r); ctx.arcTo(0,512,0,0,r); ctx.arcTo(0,0,512,0,r);
@@ -293,71 +292,12 @@ tbody tr:hover{ background: rgba(0,122,255,0.05); }
   }catch(e){ console.warn('PWA icon/manifest setup skipped', e); }
 })();
 
-/* ---------------- custom animated picker (auto-replaces every native <select> popup) ---------------- */
-let OPEN_CSEL = null;
-function closeAllCsel(){ if(OPEN_CSEL){ OPEN_CSEL.classList.remove('open'); OPEN_CSEL = null; } }
-document.addEventListener('click', (e)=>{ if(OPEN_CSEL && !OPEN_CSEL.contains(e.target)) closeAllCsel(); }, true);
-document.addEventListener('scroll', ()=> closeAllCsel(), true);
-window.addEventListener('resize', ()=> closeAllCsel());
-function enhanceSelect(sel){
-  if(!sel || sel.dataset.enhanced) return;
-  sel.dataset.enhanced = '1';
-  const wrap = document.createElement('span');
-  wrap.className = 'csel';
-  sel.parentNode.insertBefore(wrap, sel);
-  wrap.appendChild(sel);
-  const btn = document.createElement('button');
-  btn.type = 'button'; btn.className = 'csel-btn';
-  btn.innerHTML = `<span class="csel-label"></span><span class="csel-chevron">▾</span>`;
-  const label = btn.querySelector('.csel-label');
-  const menu = document.createElement('div'); menu.className = 'csel-menu';
-  function syncLabel(){
-    const opt = sel.options[sel.selectedIndex];
-    label.textContent = opt ? opt.textContent : '';
-  }
-  function buildMenu(){
-    menu.innerHTML = '';
-    if(!sel.options.length){
-      const empty = document.createElement('div'); empty.className = 'csel-item empty'; empty.textContent = 'No options yet';
-      menu.appendChild(empty); return;
-    }
-    Array.from(sel.options).forEach((opt,i)=>{
-      const item = document.createElement('div');
-      item.className = 'csel-item' + (i===sel.selectedIndex ? ' sel' : '');
-      item.textContent = opt.textContent;
-      item.addEventListener('click', (e)=>{
-        e.stopPropagation();
-        sel.selectedIndex = i;
-        sel.dispatchEvent(new Event('input', {bubbles:true}));
-        sel.dispatchEvent(new Event('change', {bubbles:true}));
-        syncLabel(); closeAllCsel();
-      });
-      menu.appendChild(item);
-    });
-  }
-  btn.addEventListener('click', (e)=>{
-    e.preventDefault(); e.stopPropagation();
-    if(wrap.classList.contains('open')){ closeAllCsel(); return; }
-    buildMenu(); closeAllCsel();
-    wrap.classList.add('open'); OPEN_CSEL = wrap;
-  });
-  wrap.appendChild(btn); wrap.appendChild(menu);
-  syncLabel();
-}
-function enhanceSelects(root){
-  if(!root || !root.querySelectorAll) return;
-  root.querySelectorAll('select:not([data-enhanced])').forEach(enhanceSelect);
-}
-new MutationObserver(muts=>{
-  muts.forEach(m=>{
-    m.addedNodes.forEach(node=>{
-      if(node.nodeType!==1) return;
-      if(node.matches && node.matches('select')) enhanceSelect(node);
-      else enhanceSelects(node);
-    });
-  });
-}).observe(document.documentElement, {childList:true, subtree:true});
-enhanceSelects(document.body);
+/* ---------------- dropdowns: plain native <select> ---------------- */
+// Reverted from the custom .csel picker back to the browser's own <select>
+// popup. The native control is rendered by the OS (the iOS wheel picker on
+// iPhone 14 Pro Max, the Android popup list on Redmi K30), so there is no
+// custom open/close JS state to get out of sync with taps or page scroll —
+// it always opens and always lets you pick an option.
 
 /* ---------------- firebase ---------------- */
 const firebaseConfig = {
@@ -405,6 +345,7 @@ function watchKey(key, applyFn){
     if(!snap.exists) return;
     applyFn(snap.data().value);
     setSyncPill('on');
+    if(snap.metadata.hasPendingWrites) return; // our own write echoing back — already applied locally, don't tear down whatever's on screen
     render();
   }, (err)=>{ console.error('listener error', key, err); setSyncPill('err'); });
   LISTENERS.push(unsub);
@@ -1108,8 +1049,6 @@ async function refreshProductRate(id){
   const p = STATE.products.find(x=>x.id===id); if(!p) return;
   const r = computeLanded(p.cost);
   const perUnitLanded = r.landed/(p.cost.qty||1);
-  // Only the Landed Cost moves with today's rates — Actual Sell Price is what you
-  // really charge, so it's left alone here; re-price it yourself if the margin needs adjusting.
   p.landedCostMMK = perUnitLanded;
   p.cost = Object.assign({}, p.cost, { ratesSnapshot: Object.assign({}, STATE.settings.rates), pricedAt: new Date().toISOString().slice(0,10) });
   await sSet('products', STATE.products);
@@ -1119,6 +1058,7 @@ async function refreshProductRate(id){
 
 /* ---------------- pricing calculator (scratchpad) ---------------- */
 let CALC_ACTUAL_TOUCHED = false;
+let CALC_REMEMBER_TIMER = null;
 function renderPricing(panel){
   const startCost = lastUsedCost();
   panel.innerHTML = `
@@ -1192,7 +1132,8 @@ function renderPricing(panel){
       <div class="line-wrap"><div class="line"><span>Profit / Unit (Actual − Landed)</span><span class="v ${profitCls}">${profitSign}${fmtMMK(Math.abs(profit))}</span></div>
         <div class="formula-hint">${fmtMMK(actual)} − ${fmtMMK(perUnitLanded)} landed = ${profitSign}${fmtMMK(Math.abs(profit))}</div></div>
     `;
-    rememberLastUsed(f, null);
+    clearTimeout(CALC_REMEMBER_TIMER);
+    CALC_REMEMBER_TIMER = setTimeout(()=> rememberLastUsed(f, null), 600); // wait for a pause in typing instead of writing on every keystroke
     return {perUnitLanded, suggested, actual};
   };
   wireCostForm('calc', calc);
