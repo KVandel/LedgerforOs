@@ -645,17 +645,22 @@ function rememberLastUsed(cost, agentId){
   lu.marginMode = cost.marginMode; lu.marginFlatMMK = cost.marginFlatMMK;
   if(agentId!=null && agentId!=='') lu.agentId = agentId;
   STATE.settings.lastUsed = lu;
-  sSet('settings', STATE.settings);
+  // Written to its own untracked doc — not the shared "settings" doc — and with no
+  // realtime listener on it. This is just a "remember where I left off" convenience;
+  // it doesn't need to push a live re-render, and routing it through "settings"
+  // was what caused the calculator to rebuild itself in a loop while typing.
+  sSet('lastUsed', lu);
 }
 
 /* ---------------- init ---------------- */
 async function init(){
   document.getElementById('app').innerHTML = '<div class="loading">Opening the ledger…</div>';
-  const [orders, agents, products, settings] = await Promise.all([
-    sGet('orders', []), sGet('agents', []), sGet('products', []), sGet('settings', STATE.settings)
+  const [orders, agents, products, settings, lastUsed] = await Promise.all([
+    sGet('orders', []), sGet('agents', []), sGet('products', []), sGet('settings', STATE.settings), sGet('lastUsed', null)
   ]);
   STATE.orders = orders; STATE.agents = agents; STATE.products = products;
   STATE.settings = Object.assign({}, STATE.settings, settings, {rates: Object.assign({}, STATE.settings.rates, (settings&&settings.rates)||{})});
+  if(lastUsed) STATE.settings.lastUsed = Object.assign({}, STATE.settings.lastUsed||{}, lastUsed);
   render();
 
   stopWatchers();
