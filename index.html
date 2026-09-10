@@ -513,7 +513,12 @@ function readShipLeg(prefix, key){
   const p = readPair(prefix+'_'+key);
   return { mode:'flat', amt:p.amt, cur:p.cur, weightKg:0, cargoRateId:'' };
 }
-// f = {unitCost:{amt,cur}, qty, intl:{amt,cur,mode,weightKg,cargoRateId}, agentMode, agentPct, agentFlat:{amt,cur}, domestic:{...}, lastMile:{...}}
+// f = {originalPrice:{amt,cur}, discountPct, unitCost:{amt,cur} (derived = originalPrice net of discount), qty, intl:{amt,cur,mode,weightKg,cargoRateId}, agentMode, agentPct, agentFlat:{amt,cur}, domestic:{...}, lastMile:{...}}
+function netUnitCost(originalPrice, discountPct){
+  const amt = Number(originalPrice.amt)||0;
+  const pct = Number(discountPct)||0;
+  return { amt: amt*(1-pct/100), cur: originalPrice.cur };
+}
 function computeLanded(f){
   const itemMMK = convert(f.unitCost.amt, f.unitCost.cur) * (f.qty||1);
   const intlMMK = convert(f.intl.amt, f.intl.cur);
@@ -531,17 +536,22 @@ function computeSell(perUnitLanded, f){
 }
 function costFormHtml(prefix, f){
   f = f || {};
-  const uc = f.unitCost||{amt:0,cur:'USD'};
+  // backward-compat: older saved products only have unitCost{amt,cur} with no originalPrice/discountPct
+  const orig = f.originalPrice || f.unitCost || {amt:0,cur:'USD'};
+  const discountPct = f.discountPct||0;
   const agentFlat = f.agentFlat||{amt:0,cur:'THB'};
   const agentMode = f.agentMode || 'percent';
   const marginMode = f.marginMode || 'percent';
+  const netUc = netUnitCost(orig, discountPct);
   return `
     <h3 class="section">Item Cost</h3>
-    <div class="section-hint">Unit Cost × Qty, converted to Ks at today's rate</div>
+    <div class="section-hint">Original Price minus Discount % gives the Unit Cost, × Qty, converted to Ks at today's rate</div>
     <div class="row">
-      <div class="field"><label>Unit Cost</label>${curPairHtml(prefix+'_uc', uc.amt, uc.cur)}</div>
+      <div class="field"><label>Original Price</label>${curPairHtml(prefix+'_orig', orig.amt, orig.cur)}</div>
+      <div class="field"><label>Discount %</label><input id="${prefix}_discount" type="number" step="0.1" min="0" max="100" value="${discountPct}" style="width:90px;"></div>
       <div class="field"><label>Qty</label><input id="${prefix}_qty" type="number" min="1" value="${f.qty||1}" style="width:80px;"></div>
     </div>
+    <div class="section-hint" id="${prefix}_ucDisplay">${discountPct>0 ? `Unit Cost after ${fmt2(discountPct)}% discount: <strong>${fmt2(netUc.amt)} ${netUc.cur}</strong>` : `Unit Cost: <strong>${fmt2(netUc.amt)} ${netUc.cur}</strong>`}</div>
     <h3 class="section">Shipping Legs</h3>
     <div class="section-hint">International = cargo fee by KG (or flat) from origin to Myanmar · Domestic = "local cargo" inside Myanmar · Last-mile = to the customer's door</div>
     <div class="row">
@@ -580,6 +590,17 @@ function costFormHtml(prefix, f){
   `;
 }
 function wireCostForm(prefix, onRecalc){
+  const updateUcDisplay = ()=>{
+    const amt = parseFloat(document.getElementById(prefix+'_orig_amt').value)||0;
+    const cur = document.getElementById(prefix+'_orig_cur').value;
+    const disc = parseFloat(document.getElementById(prefix+'_discount').value)||0;
+    const net = netUnitCost({amt,cur}, disc);
+    const el = document.getElementById(prefix+'_ucDisplay');
+    if(el) el.innerHTML = disc>0 ? `Unit Cost after ${fmt2(disc)}% discount: <strong>${fmt2(net.amt)} ${net.cur}</strong>` : `Unit Cost: <strong>${fmt2(net.amt)} ${net.cur}</strong>`;
+  };
+  document.getElementById(prefix+'_orig_amt').addEventListener('input', ()=>{ updateUcDisplay(); if(onRecalc) onRecalc(); });
+  document.getElementById(prefix+'_orig_cur').addEventListener('change', ()=>{ updateUcDisplay(); if(onRecalc) onRecalc(); });
+  document.getElementById(prefix+'_discount').addEventListener('input', ()=>{ updateUcDisplay(); if(onRecalc) onRecalc(); });
   const toggle = document.getElementById(prefix+'_agentModeToggle');
   toggle.addEventListener('click', (e)=>{
     const b = e.target.closest('button'); if(!b) return;
@@ -604,8 +625,12 @@ function wireCostForm(prefix, onRecalc){
   document.getElementById(prefix+'_recalc').addEventListener('click', onRecalc);
 }
 function readCostForm(prefix){
+  const originalPrice = readPair(prefix+'_orig');
+  const discountPct = parseFloat(document.getElementById(prefix+'_discount').value)||0;
   return {
-    unitCost: readPair(prefix+'_uc'),
+    originalPrice,
+    discountPct,
+    unitCost: netUnitCost(originalPrice, discountPct),
     qty: parseFloat(document.getElementById(prefix+'_qty').value)||1,
     intl: readShipLeg(prefix, 'intl'),
     domestic: readShipLeg(prefix, 'dom'),
@@ -622,6 +647,8 @@ function readCostForm(prefix){
 function lastUsedCost(){
   const lu = STATE.settings.lastUsed || {};
   return {
+    originalPrice:{amt:0, cur: lu.uc_cur || 'USD'},
+    discountPct: 0,
     unitCost:{amt:0, cur: lu.uc_cur || 'USD'},
     qty:1,
     intl:{mode: lu.intl_mode||'flat', amt:0, cur: lu.intl_cur||'USD', weightKg:0, cargoRateId: lu.intl_cargoRateId||''},
@@ -726,6 +753,21 @@ function orderSellMMK(o){
   if(o.mode==='catalog') return (o.snapSellMMK||0)*(o.qty||1);
   return Number(o.sellPriceMMK||0);
 }
+/* ---- real / actual figures (falls back to the guessed figure when no real value entered yet) ---- */
+function orderRealLandedMMK(o){ return Number(o.actualLandedMMK||0)>0 ? Number(o.actualLandedMMK) : orderLandedMMK(o); }
+function orderRealSellMMK(o){ return Number(o.actualSellMMK||0)>0 ? Number(o.actualSellMMK) : orderSellMMK(o); }
+function orderHasActuals(o){ return Number(o.actualLandedMMK||0)>0 || Number(o.actualSellMMK||0)>0; }
+function orderBalanceMMK(o){ return Math.max(0, orderRealSellMMK(o) - Number(o.depositMMK||0)); }
+function orderRealProfitMMK(o){ return orderRealSellMMK(o) - orderRealLandedMMK(o); }
+function orderGuessProfitMMK(o){ return orderSellMMK(o) - orderLandedMMK(o); }
+function orderDeliveryGuessMMK(o){
+  let c = null;
+  if(o.mode==='custom') c = o.cost;
+  else { const p = STATE.products.find(x=>x.id===o.productId); c = p ? p.cost : null; }
+  if(!c) return 0;
+  const r = computeLanded(c);
+  return (r.intlMMK||0) + (r.domMMK||0) + (r.lastMMK||0);
+}
 
 /* ---------------- panel router ---------------- */
 function renderPanel(){
@@ -767,7 +809,8 @@ function blankOrder(){
   return { id: uid(), mode:'catalog', productId:'', customer:'', phone:'', product:'', qty:1,
     snapLandedMMK:0, snapSellMMK:0,
     cost: lastUsedCost(),
-    sellPriceMMK:0, depositMMK:0, status:'deposit', agentId: (STATE.settings.lastUsed||{}).agentId||'', orderDate: new Date().toISOString().slice(0,10), notes:'' };
+    sellPriceMMK:0, depositMMK:0, status:'deposit', agentId: (STATE.settings.lastUsed||{}).agentId||'', orderDate: new Date().toISOString().slice(0,10), notes:'',
+    prepaidOutMMK:0, actualDeliveryMMK:0, actualLandedMMK:0, actualSellMMK:0 };
 }
 function renderOrders(panel){
   panel.innerHTML = `
@@ -850,6 +893,14 @@ function showOrderForm(o){
         <div class="field"><label>Agent</label><select id="f_agent"><option value="">—</option>${agentOpts}</select></div>
         <div class="field"><label>Order Date</label><input id="f_date" type="date" value="${o.orderDate}"></div>
       </div>
+      <h3 class="section">Actuals — what really happened (fill in once known)</h3>
+      <div class="section-hint">Pricing above is your pre-order estimate. Enter the real numbers here as they come in — the Finance Report uses these, and falls back to the estimate until you do.</div>
+      <div class="row">
+        <div class="field"><label>Real Delivery Cost (MMK)<br><span class="muted" style="font-weight:400;">guess: ${fmtMMK(orderDeliveryGuessMMK(o))}</span></label><input id="f_actDelivery" type="number" value="${o.actualDeliveryMMK||''}" placeholder="0" style="width:150px;"></div>
+        <div class="field"><label>Real Total Landed Cost (MMK)<br><span class="muted" style="font-weight:400;">guess: ${fmtMMK(orderLandedMMK(o))}</span></label><input id="f_actLanded" type="number" value="${o.actualLandedMMK||''}" placeholder="0" style="width:150px;"></div>
+        <div class="field"><label>Real Sale Price (MMK)<br><span class="muted" style="font-weight:400;">quoted: ${fmtMMK(orderSellMMK(o))}</span></label><input id="f_actSell" type="number" value="${o.actualSellMMK||''}" placeholder="0" style="width:150px;"></div>
+        <div class="field"><label>Money I Prepaid Out (MMK)</label><input id="f_prepaidOut" type="number" value="${o.prepaidOutMMK||''}" placeholder="0" style="width:150px;"></div>
+      </div>
       <div class="row" style="margin-top:10px;"><div class="field grow"><label>Notes</label><textarea id="f_notes" rows="2">${escapeHtml(o.notes)}</textarea></div></div>
       <div class="row" style="margin-top:16px;"><button class="btn stamp" id="f_save">Save Order</button><button class="btn ghost" id="f_cancel">Cancel</button></div>
     </div>
@@ -883,7 +934,11 @@ function showOrderForm(o){
       status: document.getElementById('f_status').value,
       agentId: document.getElementById('f_agent').value,
       orderDate: document.getElementById('f_date').value,
-      notes: document.getElementById('f_notes').value.trim()
+      notes: document.getElementById('f_notes').value.trim(),
+      actualDeliveryMMK: parseFloat(document.getElementById('f_actDelivery').value)||0,
+      actualLandedMMK: parseFloat(document.getElementById('f_actLanded').value)||0,
+      actualSellMMK: parseFloat(document.getElementById('f_actSell').value)||0,
+      prepaidOutMMK: parseFloat(document.getElementById('f_prepaidOut').value)||0
     };
     let updated;
     if(mode==='catalog'){
@@ -928,17 +983,20 @@ function filteredProducts(){
 function productsTableHtml(){
   const list = filteredProducts();
   if(!list.length) return `<div class="card-empty">${PROD_SEARCH ? 'No products match your search.' : 'No products saved yet.'}</div>`;
-  return `<table><thead><tr><th>Code</th><th>Name</th><th>Category</th><th>Landed Cost</th><th>Actual Sell Price</th><th>Profit / Unit</th><th>Notes</th><th></th></tr></thead>
+  return `<table><thead><tr><th>Code</th><th>Name</th><th>Category</th><th>Original Price</th><th>Landed Cost</th><th>Actual Sell Price</th><th>Profit / Unit</th><th>Notes</th><th></th></tr></thead>
     <tbody>${list.map(p=>{
       const profit = Number(p.sellPriceMMK||0) - Number(p.landedCostMMK||0);
       const profitCls = profit>=0 ? 'profit-pos' : 'profit-neg';
       const profitSign = profit>=0 ? '+' : '−';
       const pct = p.landedCostMMK ? (Math.abs(profit)/p.landedCostMMK*100).toFixed(1) : '0.0';
+      const orig = p.cost && (p.cost.originalPrice || p.cost.unitCost);
+      const discountPct = p.cost && p.cost.discountPct;
       return `
       <tr data-id="${p.id}">
         <td class="mono">${escapeHtml(p.code)||'—'}</td>
         <td>${escapeHtml(p.name)}</td>
         <td class="muted">${escapeHtml(p.category)||'—'}</td>
+        <td class="mono">${orig?`${fmt2(orig.amt)} ${orig.cur}`:'—'}${discountPct>0?`<div class="priced-note">−${fmt2(discountPct)}% discount</div>`:''}</td>
         <td class="mono">${fmtMMK(p.landedCostMMK)}${p.cost&&p.cost.pricedAt?`<div class="priced-note">as of ${p.cost.pricedAt}</div>`:''}</td>
         <td class="mono">${fmtMMK(p.sellPriceMMK)}</td>
         <td class="mono ${profitCls}">${profitSign}${fmtMMK(Math.abs(profit))}<div class="priced-note">${profit>=0?'profitted':'losing'} ${pct}% of landed cost</div></td>
@@ -1014,6 +1072,7 @@ function showProductForm(p){
     const profitCls = profit>=0 ? 'profit-pos' : 'profit-neg';
     const profitSign = profit>=0 ? '+' : '−';
     document.getElementById('pc_priceCompare').innerHTML = `
+      ${f.discountPct>0 ? `<div class="pc-row"><span>Original Price → after ${fmt2(f.discountPct)}% discount</span><span class="mono">${fmt2(f.originalPrice.amt)} ${f.originalPrice.cur} → ${fmt2(f.unitCost.amt)} ${f.unitCost.cur}</span></div>` : ''}
       <div class="pc-row"><span>Landed Cost (per unit)</span><span class="mono">${fmtMMK(perUnitLanded)}</span></div>
       <div class="pc-row"><span>Suggested Price</span><span class="mono">${fmtMMK(suggested)}</span></div>
       <div class="pc-row"><span>Actual Sell Price</span><span class="mono">${fmtMMK(actual)}</span></div>
@@ -1119,7 +1178,7 @@ function renderPricing(panel){
       : `Landed Cost × (1 + ${f.marginPct||0}%)`;
     document.getElementById('calc_result').innerHTML = `
       <div class="line-wrap"><div class="line"><span>Item Cost</span><span class="v">${fmtMMK(r.itemMMK)}</span></div>
-        <div class="formula-hint">${fmt2(f.unitCost.amt)} ${f.unitCost.cur} × ${f.qty||1} qty × ${rate.toLocaleString()} = ${fmtMMK(r.itemMMK)}</div></div>
+        <div class="formula-hint">${f.discountPct>0 ? `${fmt2(f.originalPrice.amt)} ${f.originalPrice.cur} − ${fmt2(f.discountPct)}% = ${fmt2(f.unitCost.amt)} ${f.unitCost.cur} unit cost` : `${fmt2(f.unitCost.amt)} ${f.unitCost.cur} unit cost`} × ${f.qty||1} qty × ${rate.toLocaleString()} = ${fmtMMK(r.itemMMK)}</div></div>
       <div class="line-wrap"><div class="line"><span>International Shipping</span><span class="v">${fmtMMK(r.intlMMK)}</span></div>
         <div class="formula-hint">${f.intl.mode==='weight' ? `${fmt2(f.intl.weightKg)} kg × cargo rate` : `${fmt2(f.intl.amt)} ${f.intl.cur}`} → ${fmtMMK(r.intlMMK)}</div></div>
       <div class="line-wrap"><div class="line"><span>Domestic Transfer (local cargo)</span><span class="v">${fmtMMK(r.domMMK)}</span></div>
