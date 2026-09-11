@@ -806,11 +806,24 @@ function renderDashboard(panel){
 
 /* ---------------- orders ---------------- */
 function blankOrder(){
-  return { id: uid(), mode:'catalog', productId:'', customer:'', phone:'', product:'', qty:1,
+  return { id: uid(), mode:'catalog', productId:'', customer:'', phone:'', product:'', brand:'', weightKg:0, qty:1,
     snapLandedMMK:0, snapSellMMK:0,
     cost: lastUsedCost(),
     sellPriceMMK:0, depositMMK:0, status:'deposit', agentId: (STATE.settings.lastUsed||{}).agentId||'', orderDate: new Date().toISOString().slice(0,10), notes:'',
+    supplierDate:'', deliveredDate:'', custDiscountPct:0,
     prepaidOutMMK:0, actualDeliveryMMK:0, actualLandedMMK:0, actualSellMMK:0 };
+}
+/* days between order date and delivered-to-customer date, or null if either is missing */
+function orderDurationDays(o){
+  if(!o.orderDate || !o.deliveredDate) return null;
+  const a = new Date(o.orderDate), b = new Date(o.deliveredDate);
+  if(isNaN(a)||isNaN(b)) return null;
+  return Math.round((b-a)/86400000);
+}
+function orderProfitPct(o){
+  const landed = orderRealLandedMMK(o);
+  if(!landed) return null;
+  return (orderRealProfitMMK(o)/landed)*100;
 }
 function renderOrders(panel){
   panel.innerHTML = `
@@ -825,24 +838,29 @@ function renderOrders(panel){
 }
 function renderOrdersTable(){
   const rows = [...STATE.orders].sort((a,b)=>(b.orderDate||'').localeCompare(a.orderDate||''));
-  return `<table><thead><tr><th>Date</th><th>Customer</th><th>Product</th><th>Qty</th><th>Landed Cost</th><th>Sell Price</th><th>Deposit</th><th>Balance</th><th>Status</th><th>Agent</th><th></th></tr></thead>
+  return `<div style="overflow-x:auto;"><table><thead><tr><th>Date</th><th>Customer</th><th>Brand / Product</th><th>Qty</th><th>Landed Cost</th><th>Sell Price</th><th>Deposit</th><th>Balance</th><th>Days</th><th>Profit %</th><th>Status</th><th>Agent</th><th></th></tr></thead>
     <tbody>${rows.map(o=>{
       const agent = STATE.agents.find(a=>a.id===o.agentId);
       const bal = Math.max(0, orderSellMMK(o)-Number(o.depositMMK||0));
+      const days = orderDurationDays(o);
+      const pct = orderProfitPct(o);
+      const pctCls = pct==null ? 'muted' : (pct>=0 ? 'profit-pos' : 'profit-neg');
       return `<tr data-id="${o.id}">
         <td class="muted mono">${o.orderDate||''}</td>
         <td>${escapeHtml(o.customer)||'—'}<br><span class="muted">${escapeHtml(o.phone)||''}</span></td>
-        <td>${escapeHtml(o.product)||'—'}</td>
+        <td>${o.brand?`<span class="muted">${escapeHtml(o.brand)}</span><br>`:''}${escapeHtml(o.product)||'—'}</td>
         <td class="mono">${o.qty||1}</td>
         <td class="mono">${fmtMMK(orderLandedMMK(o))}</td>
         <td class="mono">${fmtMMK(orderSellMMK(o))}</td>
         <td class="mono">${fmtMMK(o.depositMMK)}</td>
         <td class="mono">${fmtMMK(bal)}</td>
+        <td class="mono muted">${days!=null?days:'—'}</td>
+        <td class="mono ${pctCls}">${pct!=null?fmt2(pct)+'%':'—'}</td>
         <td><span class="badge ${statusMeta(o.status).cls}">${statusMeta(o.status).label}</span></td>
         <td class="muted">${agent?escapeHtml(agent.name):'—'}</td>
         <td><button class="icon-btn edit-order" title="Edit">✎</button><button class="icon-btn del-order" title="Delete">✕</button></td>
       </tr>`;
-    }).join('')}</tbody></table>`;
+    }).join('')}</tbody></table></div>`;
 }
 function wireOrderTableEvents(){
   document.querySelectorAll('.edit-order').forEach(btn=>{
@@ -861,7 +879,7 @@ function wireOrderTableEvents(){
 function showOrderForm(o){
   const holder = document.getElementById('orderFormHolder');
   const agentOpts = STATE.agents.map(a=>`<option value="${a.id}" ${o.agentId===a.id?'selected':''}>${escapeHtml(a.name)}</option>`).join('');
-  const prodOpts = STATE.products.map(p=>`<option value="${p.id}" ${o.productId===p.id?'selected':''}>${escapeHtml(p.name)} ${p.code?'('+escapeHtml(p.code)+')':''} — ${fmtMMK(p.sellPriceMMK)}</option>`).join('');
+  const prodOpts = STATE.products.map(p=>`<option value="${p.id}" ${o.productId===p.id?'selected':''}>${p.brand?escapeHtml(p.brand)+' — ':''}${escapeHtml(p.name)} ${p.code?'('+escapeHtml(p.code)+')':''} — ${fmtMMK(p.sellPriceMMK)}</option>`).join('');
   holder.innerHTML = `
     <div class="panel" style="background:var(--paper-2); margin-bottom:16px;">
       <h2 style="margin-bottom:14px;">${STATE.orders.find(x=>x.id===o.id)?'Edit Order':'New Order'}</h2>
@@ -877,7 +895,11 @@ function showOrderForm(o){
         ` : `<div class="card-empty">No products saved yet. Add one in the Products tab, or switch to Custom / One-off Item.</div>`}
       </div>
       <div id="ordCustomWrap" class="${o.mode==='custom'?'':'hidden'}" style="margin-top:6px;">
-        <div class="row"><div class="field grow"><label>Product / Item Name</label><input id="f_productName" value="${escapeAttr(o.product)}"></div></div>
+        <div class="row">
+          <div class="field"><label>Brand</label><input id="f_brand" value="${escapeAttr(o.brand)}" style="width:140px;"></div>
+          <div class="field grow"><label>Product / Item Name</label><input id="f_productName" value="${escapeAttr(o.product)}"></div>
+          <div class="field"><label>Weight (kg)</label><input id="f_weightKg" type="number" step="0.01" value="${o.weightKg||''}" style="width:100px;"></div>
+        </div>
         ${costFormHtml('ordc', o.cost)}
         <div class="row"><div class="field"><label>Sell Price (MMK)</label><input id="ordc_sell" type="number" value="${o.sellPriceMMK||0}" style="width:150px;"></div></div>
       </div>
@@ -893,12 +915,18 @@ function showOrderForm(o){
         <div class="field"><label>Agent</label><select id="f_agent"><option value="">—</option>${agentOpts}</select></div>
         <div class="field"><label>Order Date</label><input id="f_date" type="date" value="${o.orderDate}"></div>
       </div>
+      <div class="row" style="margin-top:10px;">
+        <div class="field"><label>Supplier → Us Date</label><input id="f_supplierDate" type="date" value="${o.supplierDate||''}"></div>
+        <div class="field"><label>Delivered → Customer Date</label><input id="f_deliveredDate" type="date" value="${o.deliveredDate||''}"></div>
+        <div class="field"><label>Days Order → Delivery</label><input value="${orderDurationDays(o)!=null?orderDurationDays(o)+' days':'—'}" disabled style="width:110px; opacity:0.6;"></div>
+      </div>
       <h3 class="section">Actuals — what really happened (fill in once known)</h3>
       <div class="section-hint">Pricing above is your pre-order estimate. Enter the real numbers here as they come in — the Finance Report uses these, and falls back to the estimate until you do.</div>
       <div class="row">
         <div class="field"><label>Real Delivery Cost (MMK)<br><span class="muted" style="font-weight:400;">guess: ${fmtMMK(orderDeliveryGuessMMK(o))}</span></label><input id="f_actDelivery" type="number" value="${o.actualDeliveryMMK||''}" placeholder="0" style="width:150px;"></div>
         <div class="field"><label>Real Total Landed Cost (MMK)<br><span class="muted" style="font-weight:400;">guess: ${fmtMMK(orderLandedMMK(o))}</span></label><input id="f_actLanded" type="number" value="${o.actualLandedMMK||''}" placeholder="0" style="width:150px;"></div>
         <div class="field"><label>Real Sale Price (MMK)<br><span class="muted" style="font-weight:400;">quoted: ${fmtMMK(orderSellMMK(o))}</span></label><input id="f_actSell" type="number" value="${o.actualSellMMK||''}" placeholder="0" style="width:150px;"></div>
+        <div class="field"><label>Discount Given to Customer (%)</label><input id="f_custDiscount" type="number" step="0.1" value="${o.custDiscountPct||''}" placeholder="0" style="width:120px;"></div>
         <div class="field"><label>Money I Prepaid Out (MMK)</label><input id="f_prepaidOut" type="number" value="${o.prepaidOutMMK||''}" placeholder="0" style="width:150px;"></div>
       </div>
       <div class="row" style="margin-top:10px;"><div class="field grow"><label>Notes</label><textarea id="f_notes" rows="2">${escapeHtml(o.notes)}</textarea></div></div>
@@ -934,10 +962,13 @@ function showOrderForm(o){
       status: document.getElementById('f_status').value,
       agentId: document.getElementById('f_agent').value,
       orderDate: document.getElementById('f_date').value,
+      supplierDate: document.getElementById('f_supplierDate').value,
+      deliveredDate: document.getElementById('f_deliveredDate').value,
       notes: document.getElementById('f_notes').value.trim(),
       actualDeliveryMMK: parseFloat(document.getElementById('f_actDelivery').value)||0,
       actualLandedMMK: parseFloat(document.getElementById('f_actLanded').value)||0,
       actualSellMMK: parseFloat(document.getElementById('f_actSell').value)||0,
+      custDiscountPct: parseFloat(document.getElementById('f_custDiscount').value)||0,
       prepaidOutMMK: parseFloat(document.getElementById('f_prepaidOut').value)||0
     };
     let updated;
@@ -945,15 +976,17 @@ function showOrderForm(o){
       const pid = document.getElementById('f_productId') ? document.getElementById('f_productId').value : '';
       const p = STATE.products.find(x=>x.id===pid);
       if(!p){ toast('Choose a product, or switch to Custom item'); return; }
-      updated = Object.assign({}, base, { productId:p.id, product:p.name, snapLandedMMK:p.landedCostMMK, snapSellMMK:p.sellPriceMMK, cost:o.cost, sellPriceMMK:0 });
+      updated = Object.assign({}, base, { productId:p.id, product:p.name, brand:p.brand||'', weightKg:p.weightKg||0, snapLandedMMK:p.landedCostMMK, snapSellMMK:p.sellPriceMMK, cost:o.cost, sellPriceMMK:0 });
     } else {
       const name = document.getElementById('f_productName').value.trim();
       if(!name){ toast('Item name required'); return; }
+      const brand = document.getElementById('f_brand').value.trim();
+      const weightKg = parseFloat(document.getElementById('f_weightKg').value)||0;
       const cost = readCostForm('ordc');
       cost.ratesSnapshot = Object.assign({}, STATE.settings.rates);
       cost.pricedAt = new Date().toISOString().slice(0,10);
       const sell = parseFloat(document.getElementById('ordc_sell').value)||0;
-      updated = Object.assign({}, base, { productId:'', product:name, cost, sellPriceMMK: sell, snapLandedMMK:0, snapSellMMK:0 });
+      updated = Object.assign({}, base, { productId:'', product:name, brand, weightKg, cost, sellPriceMMK: sell, snapLandedMMK:0, snapSellMMK:0 });
     }
     if(!updated.customer){ toast('Customer name required'); return; }
     rememberLastUsed(updated.cost, updated.agentId);
@@ -966,7 +999,7 @@ function showOrderForm(o){
 
 /* ---------------- products ---------------- */
 function blankProduct(){
-  return { id:uid(), code:'', name:'', category:'', notes:'',
+  return { id:uid(), code:'', name:'', brand:'', category:'', weightKg:0, notes:'',
     cost: lastUsedCost(),
     landedCostMMK:0, sellPriceMMK:0 };
 }
@@ -977,13 +1010,14 @@ function filteredProducts(){
   return STATE.products.filter(p=>
     (p.name||'').toLowerCase().includes(q) ||
     (p.code||'').toLowerCase().includes(q) ||
+    (p.brand||'').toLowerCase().includes(q) ||
     (p.category||'').toLowerCase().includes(q)
   );
 }
 function productsTableHtml(){
   const list = filteredProducts();
   if(!list.length) return `<div class="card-empty">${PROD_SEARCH ? 'No products match your search.' : 'No products saved yet.'}</div>`;
-  return `<table><thead><tr><th>Code</th><th>Name</th><th>Category</th><th>Original Price</th><th>Landed Cost</th><th>Actual Sell Price</th><th>Profit / Unit</th><th>Notes</th><th></th></tr></thead>
+  return `<div style="overflow-x:auto;"><table><thead><tr><th>Code</th><th>Brand</th><th>Name</th><th>Category</th><th>Original Price</th><th>Landed Cost</th><th>Actual Sell Price</th><th>Profit / Unit</th><th>Notes</th><th></th></tr></thead>
     <tbody>${list.map(p=>{
       const profit = Number(p.sellPriceMMK||0) - Number(p.landedCostMMK||0);
       const profitCls = profit>=0 ? 'profit-pos' : 'profit-neg';
@@ -994,6 +1028,7 @@ function productsTableHtml(){
       return `
       <tr data-id="${p.id}">
         <td class="mono">${escapeHtml(p.code)||'—'}</td>
+        <td class="muted">${escapeHtml(p.brand)||'—'}</td>
         <td>${escapeHtml(p.name)}</td>
         <td class="muted">${escapeHtml(p.category)||'—'}</td>
         <td class="mono">${orig?`${fmt2(orig.amt)} ${orig.cur}`:'—'}${discountPct>0?`<div class="priced-note">−${fmt2(discountPct)}% discount</div>`:''}</td>
@@ -1002,7 +1037,7 @@ function productsTableHtml(){
         <td class="mono ${profitCls}">${profitSign}${fmtMMK(Math.abs(profit))}<div class="priced-note">${profit>=0?'profitted':'losing'} ${pct}% of landed cost</div></td>
         <td class="muted">${escapeHtml(p.notes)||''}</td>
         <td><button class="icon-btn refresh-prod" title="Reprice with today's exchange rate">↻</button><button class="icon-btn edit-prod" title="Edit">✎</button><button class="icon-btn del-prod" title="Delete">✕</button></td>
-      </tr>`;}).join('')}</tbody></table>`;
+      </tr>`;}).join('')}</tbody></table></div>`;
 }
 function wireProductTableEvents(){
   document.querySelectorAll('.edit-prod').forEach(btn=>{
@@ -1048,8 +1083,10 @@ function showProductForm(p){
     <div class="panel" style="background:var(--paper-2); margin-bottom:16px;">
       <div class="row">
         <div class="field"><label>Item Code / SKU</label><input id="p_code" value="${escapeAttr(p.code)}" style="width:120px;"></div>
+        <div class="field"><label>Brand</label><input id="p_brand" value="${escapeAttr(p.brand)}" style="width:130px;"></div>
         <div class="field grow"><label>Item Name</label><input id="p_name" value="${escapeAttr(p.name)}"></div>
         <div class="field"><label>Category</label><input id="p_category" value="${escapeAttr(p.category)}" style="width:140px;"></div>
+        <div class="field"><label>Weight (kg)</label><input id="p_weightKg" type="number" step="0.01" value="${p.weightKg||''}" style="width:100px;"></div>
       </div>
       ${costFormHtml('pc', p.cost)}
       <h3 class="section">Actual Sell Price</h3>
@@ -1099,6 +1136,7 @@ function showProductForm(p){
     cost.pricedAt = new Date().toISOString().slice(0,10);
     const updated = {
       id:p.id, code: document.getElementById('p_code').value.trim(), name, category: document.getElementById('p_category').value.trim(),
+      brand: document.getElementById('p_brand').value.trim(), weightKg: parseFloat(document.getElementById('p_weightKg').value)||0,
       notes: document.getElementById('p_notes').value.trim(), cost,
       landedCostMMK: perUnitLanded, sellPriceMMK: parseFloat(document.getElementById('pc_sell').value)||0
     };
@@ -1357,12 +1395,18 @@ function renderData(panel){
     try{
       const wb = XLSX.utils.book_new();
       const ordRows = STATE.orders.map(o=>({
-        Date:o.orderDate, Customer:o.customer, Phone:o.phone, Product:o.product, Qty:o.qty,
-        'Landed Cost (MMK)':Math.round(orderLandedMMK(o)), 'Sell Price (MMK)':Math.round(orderSellMMK(o)),
-        'Deposit (MMK)':o.depositMMK, 'Balance (MMK)':Math.round(Math.max(0,orderSellMMK(o)-o.depositMMK)),
+        'Order Date':o.orderDate, 'Supplier→Us Date':o.supplierDate||'', 'Delivered→Customer Date':o.deliveredDate||'',
+        'Days to Deliver': orderDurationDays(o)!=null?orderDurationDays(o):'',
+        Customer:o.customer, Phone:o.phone, Brand:o.brand||'', Product:o.product, Qty:o.qty, 'Weight (kg)':o.weightKg||'',
+        'Guess Landed Cost (MMK)':Math.round(orderLandedMMK(o)), 'Real Landed Cost (MMK)':Math.round(orderRealLandedMMK(o)),
+        'Real Delivery Cost (MMK)':o.actualDeliveryMMK||'', 'Sell Price (MMK)':Math.round(orderSellMMK(o)),
+        'Real Sale Price (MMK)':o.actualSellMMK||'', 'Discount to Customer (%)':o.custDiscountPct||'',
+        'Deposit Received (MMK)':o.depositMMK, 'Deposit Paid to Supplier (MMK)':o.prepaidOutMMK||'',
+        'Balance Owed (MMK)':Math.round(Math.max(0,orderSellMMK(o)-o.depositMMK)),
+        'Profit/Loss (MMK)':Math.round(orderRealProfitMMK(o)), 'Profit %': orderProfitPct(o)!=null?orderProfitPct(o).toFixed(1):'',
         Status:statusMeta(o.status).label, Agent:(STATE.agents.find(a=>a.id===o.agentId)||{}).name||'', Notes:o.notes
       }));
-      const prodRows = STATE.products.map(p=>({ Code:p.code, Name:p.name, Category:p.category,
+      const prodRows = STATE.products.map(p=>({ Code:p.code, Brand:p.brand||'', Name:p.name, Category:p.category, 'Weight (kg)':p.weightKg||'',
         'Landed Cost (MMK)':Math.round(p.landedCostMMK), 'Sell Price (MMK)':Math.round(p.sellPriceMMK), Notes:p.notes }));
       const agentRows = STATE.agents.map(a=>({ Name:a.name, Contact:a.contact, Location:a.location, Notes:a.notes }));
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(ordRows), 'Orders');
