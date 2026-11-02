@@ -382,6 +382,8 @@ function renderLogin(err){
   document.getElementById('l_pass').addEventListener('keydown', (e)=>{ if(e.key==='Enter') go(); });
 }
 async function logout(){
+  saveCalculatorDraft();
+  clearTimeout(CALC_REMEMBER_TIMER);
   stopWatchers();
   await auth.signOut();
 }
@@ -410,7 +412,7 @@ let STATE = {
     lastUsed: {}
   }
 };
-let ACTIVE_TAB = 'dashboard';
+let ACTIVE_TAB = 'pricing';
 const uid = () => Math.random().toString(36).slice(2,10);
 
 function fmtMMK(n){ n = Math.round(n||0); return n.toLocaleString('en-US') + ' Ks'; }
@@ -433,8 +435,8 @@ const STATUS_OPTS = [
 function statusMeta(v){ return STATUS_OPTS.find(s=>s.v===v) || STATUS_OPTS[0]; }
 
 /* ---------------- currency + cost engine ---------------- */
-function convert(amount, currency){
-  const rate = STATE.settings.rates[currency];
+function convert(amount, currency, rates = STATE.settings.rates){
+  const rate = rates[currency];
   return (Number(amount)||0) * (rate!=null?rate:1);
 }
 function curPairHtml(prefix, amtVal, curVal){
@@ -519,13 +521,13 @@ function netUnitCost(originalPrice, discountPct){
   const pct = Number(discountPct)||0;
   return { amt: amt*(1-pct/100), cur: originalPrice.cur };
 }
-function computeLanded(f){
-  const itemMMK = convert(f.unitCost.amt, f.unitCost.cur) * (f.qty||1);
-  const intlMMK = convert(f.intl.amt, f.intl.cur);
-  const domMMK = convert(f.domestic.amt, f.domestic.cur);
-  const lastMMK = convert(f.lastMile.amt, f.lastMile.cur);
-  const feeBase = itemMMK + intlMMK;
-  const agentMMK = f.agentMode==='flat' ? convert(f.agentFlat.amt, f.agentFlat.cur) : feeBase*(Number(f.agentPct)||0)/100;
+function computeLanded(f, rates = f.ratesSnapshot || STATE.settings.rates){
+  const itemMMK = convert(f.unitCost.amt, f.unitCost.cur, rates) * (f.qty||1);
+  const intlMMK = convert(f.intl.amt, f.intl.cur, rates);
+  const domMMK = convert(f.domestic.amt, f.domestic.cur, rates);
+  const lastMMK = convert(f.lastMile.amt, f.lastMile.cur, rates);
+  const feeBase = itemMMK; // Agent commission applies only to discounted products, never shipping.
+  const agentMMK = f.agentMode==='flat' ? convert(f.agentFlat.amt, f.agentFlat.cur, rates) : feeBase*(Number(f.agentPct)||0)/100;
   const landed = itemMMK+intlMMK+domMMK+lastMMK+agentMMK;
   return {itemMMK, intlMMK, domMMK, lastMMK, agentMMK, landed};
 }
@@ -544,6 +546,7 @@ function costFormHtml(prefix, f){
   const marginMode = f.marginMode || 'percent';
   const netUc = netUnitCost(orig, discountPct);
   return `
+    <div id="${prefix}_error" role="alert" class="login-err"></div>
     <h3 class="section">Item Cost</h3>
     <div class="section-hint">Original Price minus Discount % gives the Unit Cost, × Qty, converted to Ks at today's rate</div>
     <div class="row">
@@ -553,18 +556,18 @@ function costFormHtml(prefix, f){
     </div>
     <div class="section-hint" id="${prefix}_ucDisplay">${discountPct>0 ? `Unit Cost after ${fmt2(discountPct)}% discount: <strong>${fmt2(netUc.amt)} ${netUc.cur}</strong>` : `Unit Cost: <strong>${fmt2(netUc.amt)} ${netUc.cur}</strong>`}</div>
     <h3 class="section">Shipping Legs</h3>
-    <div class="section-hint">International = cargo fee by KG (or flat) from origin to Myanmar · Domestic = "local cargo" inside Myanmar · Last-mile = to the customer's door</div>
+    <div class="section-hint">Enter shipping totals for the whole batch; they are divided by Qty. International = cargo fee by KG (or flat) from origin to Myanmar · Domestic = "local cargo" inside Myanmar · Last-mile = to the customer's door</div>
     <div class="row">
       ${shipLegHtml(prefix, 'intl', 'International (origin → Myanmar)', f.intl)}
       ${shipLegHtml(prefix, 'dom', 'Domestic transfer (MM warehouse → my store)', f.domestic)}
       ${shipLegHtml(prefix, 'last', 'Last-mile (my store → customer)', f.lastMile)}
     </div>
     <h3 class="section">Agent Fee</h3>
-    <div class="section-hint">% mode charges on (Item Cost + International Shipping) in Ks; Flat mode is a fixed amount</div>
+    <div class="section-hint">% mode charges on discounted Item Cost × Qty in Ks, excluding all shipping; Flat mode is a fixed fee for the whole batch</div>
     <div class="row">
       <div class="field"><label>Fee Type</label>
         <div class="mode-toggle" id="${prefix}_agentModeToggle">
-          <button type="button" data-mode="percent" class="${agentMode==='percent'?'on':''}">% of cost</button>
+          <button type="button" data-mode="percent" class="${agentMode==='percent'?'on':''}">% of products</button>
           <button type="button" data-mode="flat" class="${agentMode==='flat'?'on':''}">Flat fee</button>
         </div>
         <input type="hidden" id="${prefix}_agentMode" value="${agentMode}">
@@ -609,6 +612,7 @@ function wireCostForm(prefix, onRecalc){
     toggle.querySelectorAll('button').forEach(x=>x.classList.toggle('on', x.dataset.mode===mode));
     document.getElementById(prefix+'_agentPctWrap').classList.toggle('hidden', mode!=='percent');
     document.getElementById(prefix+'_agentFlatWrap').classList.toggle('hidden', mode!=='flat');
+    if(onRecalc) onRecalc();
   });
   const marginToggle = document.getElementById(prefix+'_marginModeToggle');
   marginToggle.addEventListener('click', (e)=>{
@@ -618,13 +622,83 @@ function wireCostForm(prefix, onRecalc){
     marginToggle.querySelectorAll('button').forEach(x=>x.classList.toggle('on', x.dataset.mode===mode));
     document.getElementById(prefix+'_marginPctWrap').classList.toggle('hidden', mode!=='percent');
     document.getElementById(prefix+'_marginFlatWrap').classList.toggle('hidden', mode!=='flat');
+    if(onRecalc) onRecalc();
+  });
+  ['qty','agentPct','agentFlat_amt','margin','marginFlat','intl_amt','dom_amt','last_amt'].forEach(key=>{
+    document.getElementById(prefix+'_'+key).addEventListener('input', ()=>{ if(onRecalc) onRecalc(); });
+  });
+  ['agentFlat_cur','intl_cur','dom_cur','last_cur'].forEach(key=>{
+    document.getElementById(prefix+'_'+key).addEventListener('change', ()=>{ if(onRecalc) onRecalc(); });
   });
   wireShipLeg(prefix, 'intl', onRecalc);
   wireShipLeg(prefix, 'dom', onRecalc);
   wireShipLeg(prefix, 'last', onRecalc);
   document.getElementById(prefix+'_recalc').addEventListener('click', onRecalc);
 }
+function numericInputError(value, id){
+  const n = Number(value);
+  if(String(value).trim()==='' || !Number.isFinite(n) || n<0) return 'Enter a finite, non-negative number.';
+  if(/_qty$/.test(id) && (!Number.isInteger(n) || n<1)) return 'Quantity must be a whole number of at least 1.';
+  if(/discount|custDiscount/i.test(id) && n>100) return 'Discount must be between 0 and 100%.';
+  if((id.startsWith('rate_') || id==='cr_amt') && n<=0) return 'Rates must be greater than zero.';
+  return '';
+}
+function validateNumericFields(ids){
+  let valid = true;
+  for(const id of ids){
+    const el = document.getElementById(id);
+    const error = numericInputError(el.value, id);
+    el.setCustomValidity(error);
+    el.setAttribute('aria-invalid', String(!!error));
+    if(error && valid){ el.reportValidity(); valid = false; }
+  }
+  return valid;
+}
+function validateCostForm(prefix){
+  const ids = ['orig_amt','discount','qty'];
+  const value = key=>document.getElementById(prefix+'_'+key).value;
+  ids.push(value('agentMode')==='flat'?'agentFlat_amt':'agentPct');
+  ids.push(value('marginMode')==='flat'?'marginFlat':'margin');
+  let error = '';
+  const currencies = [value('orig_cur')];
+  if(value('agentMode')==='flat') currencies.push(value('agentFlat_cur'));
+  for(const key of ['intl','dom','last']){
+    if(value(key+'_mode')==='weight'){
+      ids.push(key+'_kg');
+      const rate = (STATE.settings.cargoRates||[]).find(r=>r.id===value(key+'_rateId'));
+      if(!rate || !Number.isFinite(Number(rate.amount)) || Number(rate.amount)<=0) error = 'Choose a valid cargo rate for each shipping leg charged by weight.';
+      else currencies.push(rate.currency);
+    } else { ids.push(key+'_amt'); currencies.push(value(key+'_cur')); }
+  }
+  if(currencies.some(cur=>!Number.isFinite(Number(STATE.settings.rates[cur])) || Number(STATE.settings.rates[cur])<=0)) error = 'Set a positive exchange rate for each selected currency in Settings.';
+  const valid = validateNumericFields(ids.map(id=>prefix+'_'+id));
+  document.getElementById(prefix+'_error').textContent = error || (valid?'':'Correct the highlighted numbers before calculating or saving.');
+  return valid && !error;
+}
+function roundPriceUp(price, increment){
+  const step = [1,100,500,1000].includes(increment) ? increment : 1;
+  return Math.ceil(Number((price/step).toPrecision(15))) * step;
+}
+function calculatorDraftKey(){
+  return CURRENT_UID ? 'ledger:pricing-draft:v1:'+CURRENT_UID : null;
+}
+function loadCalculatorDraft(){
+  try{
+    const key = calculatorDraftKey();
+    const draft = key && JSON.parse(localStorage.getItem(key));
+    return draft && draft.values && typeof draft.values==='object' ? draft : null;
+  }catch(e){ return null; }
+}
+function saveCalculatorDraft(){
+  const key = calculatorDraftKey();
+  if(!key || !document.getElementById('calc_orig_amt')) return;
+  const values = {};
+  document.querySelectorAll('#panel input[id^="calc_"], #panel select[id^="calc_"]').forEach(el=>{ values[el.id] = el.value; });
+  try{ localStorage.setItem(key, JSON.stringify({values, actualTouched:CALC_ACTUAL_TOUCHED})); }
+  catch(e){ /* Keep the current form usable if browser storage is unavailable. */ }
+}
 function readCostForm(prefix){
+  if(!validateCostForm(prefix)) return null;
   const originalPrice = readPair(prefix+'_orig');
   const discountPct = parseFloat(document.getElementById(prefix+'_discount').value)||0;
   return {
@@ -663,6 +737,7 @@ function lastUsedCost(){
   };
 }
 function rememberLastUsed(cost, agentId){
+  if(!cost) return;
   const lu = Object.assign({}, STATE.settings.lastUsed||{});
   lu.uc_cur = cost.unitCost.cur;
   lu.intl_mode = cost.intl.mode; lu.intl_cur = cost.intl.cur; lu.intl_cargoRateId = cost.intl.cargoRateId;
@@ -699,6 +774,7 @@ async function init(){
 
 /* ---------------- render root ---------------- */
 function render(){
+  saveCalculatorDraft();
   const app = document.getElementById('app');
   const s = STATE.settings;
   const active = STATE.orders.filter(o=>o.status!=='cancelled');
@@ -711,7 +787,7 @@ function render(){
     <div class="letterhead">
       <div class="brandrow">
         <input class="brand-input" id="bizName" value="${escapeAttr(s.businessName)}" />
-        <div class="tagline">Order &amp; Cash Ledger</div>
+        <div class="tagline">Product Pricing &amp; Order Ledger</div>
         <div class="dateline">${new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'})} · 1 USD ≈ ${s.rates.USD.toLocaleString()} Ks</div>
       </div>
       <div style="position:relative; z-index:1; display:flex; flex-direction:column; align-items:flex-end; gap:8px;">
@@ -720,15 +796,15 @@ function render(){
       </div>
       <div class="stamp">${escapeHtml((s.businessName||'L').trim().charAt(0).toUpperCase()||'L')}</div>
     </div>
-    <div class="stats">
+    <div class="stats ${ACTIVE_TAB==='dashboard'?'':'hidden'}">
       <div class="stat accent-jade"><div class="label">Deposits Collected</div><div class="value">${fmtMMK(depositsCollected)}</div></div>
       <div class="stat accent-gold"><div class="label">Balance Owed by Customers</div><div class="value">${fmtMMK(balanceOwed)}</div></div>
       <div class="stat accent-stamp"><div class="label">Cost Committed (Active)</div><div class="value">${fmtMMK(landedCommitted)}</div></div>
       <div class="stat"><div class="label">Est. Profit (all active)</div><div class="value">${fmtMMK(estProfit)}</div></div>
     </div>
     <div class="tabs" id="tabs">
-      ${tabBtn('dashboard','Dashboard')}${tabBtn('orders','Orders')}${tabBtn('products','Products')}
-      ${tabBtn('pricing','Pricing Calculator')}${tabBtn('agents','Agents')}${tabBtn('settings','Settings')}${tabBtn('data','Data & Backup')}
+      ${tabBtn('pricing','Pricing Calculator')}${tabBtn('products','Products')}${tabBtn('orders','Orders')}
+      ${tabBtn('dashboard','Dashboard')}${tabBtn('agents','Agents')}${tabBtn('settings','Settings')}${tabBtn('data','Data & Backup')}
     </div>
     <div class="panel" id="panel"></div>
   `;
@@ -943,9 +1019,12 @@ function showOrderForm(o){
     document.getElementById('ordCustomWrap').classList.toggle('hidden', mode!=='custom');
   });
 
+  let orderPricingRates = o.cost && o.cost.ratesSnapshot;
   if(o.mode==='custom' || !STATE.products.length){
     wireCostForm('ordc', ()=>{
-      const f = readCostForm('ordc'); const r = computeLanded(f);
+      const f = readCostForm('ordc'); if(!f) return;
+      orderPricingRates = Object.assign({}, STATE.settings.rates);
+      const r = computeLanded(f);
       const perUnit = r.landed/(f.qty||1);
       document.getElementById('ordc_sell').value = Math.round(computeSell(perUnit, f)*(f.qty||1));
     });
@@ -953,6 +1032,7 @@ function showOrderForm(o){
 
   document.getElementById('f_cancel').addEventListener('click', ()=>{ holder.innerHTML=''; });
   document.getElementById('f_save').addEventListener('click', async ()=>{
+    if(!validateNumericFields(Array.from(holder.querySelectorAll('input[type=number]')).filter(el=>!el.closest('.hidden')).map(el=>el.id))) return;
     const mode = document.querySelector('#ordModeToggle button.on').dataset.mode;
     const base = {
       id:o.id, mode, customer: document.getElementById('f_customer').value.trim(),
@@ -982,9 +1062,11 @@ function showOrderForm(o){
       if(!name){ toast('Item name required'); return; }
       const brand = document.getElementById('f_brand').value.trim();
       const weightKg = parseFloat(document.getElementById('f_weightKg').value)||0;
-      const cost = readCostForm('ordc');
-      cost.ratesSnapshot = Object.assign({}, STATE.settings.rates);
-      cost.pricedAt = new Date().toISOString().slice(0,10);
+      const cost = readCostForm('ordc'); if(!cost) return;
+      cost.ratesSnapshot = Object.assign({}, orderPricingRates || STATE.settings.rates);
+      cost.pricedAt = orderPricingRates && orderPricingRates === o.cost.ratesSnapshot
+        ? o.cost.pricedAt || new Date().toISOString().slice(0,10)
+        : new Date().toISOString().slice(0,10);
       const sell = parseFloat(document.getElementById('ordc_sell').value)||0;
       updated = Object.assign({}, base, { productId:'', product:name, brand, weightKg, cost, sellPriceMMK: sell, snapLandedMMK:0, snapSellMMK:0 });
     }
@@ -1101,7 +1183,7 @@ function showProductForm(p){
     </div>
   `;
   const updatePriceCompare = ()=>{
-    const f = readCostForm('pc'); const r = computeLanded(f);
+    const f = readCostForm('pc'); if(!f){ document.getElementById('pc_priceCompare').textContent = 'Correct the highlighted pricing inputs.'; return null; } const r = computeLanded(f);
     const perUnitLanded = r.landed/(f.qty||1);
     const suggested = computeSell(perUnitLanded, f);
     const actual = parseFloat(document.getElementById('pc_sell').value)||0;
@@ -1121,15 +1203,17 @@ function showProductForm(p){
   updatePriceCompare();
   document.getElementById('pc_sell').addEventListener('input', updatePriceCompare);
   document.getElementById('pc_useSuggested').addEventListener('click', ()=>{
-    const {suggested} = updatePriceCompare();
+    const result = updatePriceCompare(); if(!result) return;
+    const {suggested} = result;
     document.getElementById('pc_sell').value = Math.round(suggested);
     updatePriceCompare();
   });
   document.getElementById('p_cancel').addEventListener('click', ()=> holder.innerHTML='');
   document.getElementById('p_save').addEventListener('click', async ()=>{
+    if(!validateNumericFields(Array.from(holder.querySelectorAll('input[type=number]')).filter(el=>!el.closest('.hidden')).map(el=>el.id))) return;
     const name = document.getElementById('p_name').value.trim();
     if(!name){ toast('Item name required'); return; }
-    const cost = readCostForm('pc');
+    const cost = readCostForm('pc'); if(!cost) return;
     const r = computeLanded(cost);
     const perUnitLanded = r.landed/(cost.qty||1);
     cost.ratesSnapshot = Object.assign({}, STATE.settings.rates);
@@ -1149,7 +1233,7 @@ function showProductForm(p){
 }
 async function refreshProductRate(id){
   const p = STATE.products.find(x=>x.id===id); if(!p) return;
-  const r = computeLanded(p.cost);
+  const r = computeLanded(p.cost, STATE.settings.rates);
   const perUnitLanded = r.landed/(p.cost.qty||1);
   p.landedCostMMK = perUnitLanded;
   p.cost = Object.assign({}, p.cost, { ratesSnapshot: Object.assign({}, STATE.settings.rates), pricedAt: new Date().toISOString().slice(0,10) });
@@ -1162,16 +1246,23 @@ async function refreshProductRate(id){
 let CALC_ACTUAL_TOUCHED = false;
 let CALC_REMEMBER_TIMER = null;
 function renderPricing(panel){
+  const draft = loadCalculatorDraft();
   const startCost = lastUsedCost();
+  if(draft){
+    for(const key of ['agentMode','marginMode']) startCost[key] = draft.values['calc_'+key] || startCost[key];
+    for(const [key,field] of [['intl','intl'],['dom','domestic'],['last','lastMile']]) startCost[field].mode = draft.values['calc_'+key+'_mode'] || startCost[field].mode;
+  }
   panel.innerHTML = `
     <h2>Pricing Calculator</h2>
-    <div class="sub">A scratchpad for "what if" pricing. Save the result straight to Products when you're happy with it — no need to redo the math on the order form later.</div>
+    <div class="sub">Price a product and save the result to Products. Your draft stays in this browser for your account, including when you switch tabs or refresh.</div>
     <div class="formula-box">
       <div><strong>How this is calculated:</strong></div>
-      <div class="f-line">Landed Cost = (Unit Cost + Agent Fee + Int'l Shipping) → converted to Ks + Domestic ("local") Cargo + Last-Mile</div>
-      <div class="f-line">Suggested Price = Landed Cost + Markup</div>
-      <div class="f-line">Profit / Unit = Actual Sell Price − Landed Cost</div>
+      <div class="f-line">Agent Fee = discounted Unit Cost × Qty × Agent % (shipping excluded)</div>
+      <div class="f-line">Landed Cost / Unit = (discounted Unit Cost × Qty + Agent Fee + All Shipping) ÷ Qty, with every amount converted to Ks</div>
+      <div class="f-line">Suggested Price / Unit = Landed Cost / Unit + Markup</div>
+      <div class="f-line">Profit / Unit = Actual Sell Price / Unit − Landed Cost / Unit</div>
     </div>
+    <div class="row"><div class="field"><label for="calc_rounding">Round suggested price up to</label><select id="calc_rounding"><option value="1">1 Ks (whole kyat)</option><option value="100">100 Ks</option><option value="500">500 Ks</option><option value="1000">1,000 Ks</option></select></div></div>
     <div class="calc-grid">
       <div>${costFormHtml('calc', startCost)}
         <h3 class="section">Actual Sale Price</h3>
@@ -1197,11 +1288,23 @@ function renderPricing(panel){
       </div>
     </div>
   `;
-  CALC_ACTUAL_TOUCHED = false;
+  if(draft){
+    panel.querySelectorAll('input[id], select[id]').forEach(el=>{ if(Object.hasOwn(draft.values,el.id)) el.value = draft.values[el.id]; });
+  }
+  CALC_ACTUAL_TOUCHED = !!(draft && draft.actualTouched);
   const calc = ()=>{
-    const f = readCostForm('calc'); const r = computeLanded(f);
+    saveCalculatorDraft();
+    const f = readCostForm('calc');
+    if(!f || !validateNumericFields(['calc_actual'])){
+      document.getElementById('calc_result').textContent = 'Enter valid, non-negative prices and a whole quantity of at least 1.';
+      document.getElementById('calc_saveProd').disabled = true;
+      return null;
+    }
+    document.getElementById('calc_saveProd').disabled = false;
+    const r = computeLanded(f);
     const perUnitLanded = r.landed/(f.qty||1);
-    const suggested = computeSell(perUnitLanded, f);
+    const unrounded = computeSell(perUnitLanded, f);
+    const suggested = roundPriceUp(unrounded, Number(document.getElementById('calc_rounding').value));
     if(!CALC_ACTUAL_TOUCHED){ document.getElementById('calc_actual').value = Math.round(suggested); }
     const actual = parseFloat(document.getElementById('calc_actual').value)||0;
     const profit = actual - perUnitLanded;
@@ -1210,7 +1313,7 @@ function renderPricing(panel){
     const rate = STATE.settings.rates[f.unitCost.cur]||1;
     const agentHint = f.agentMode==='flat'
       ? `Flat fee: ${fmt2(f.agentFlat.amt)} ${f.agentFlat.cur} → Ks`
-      : `${f.agentPct||0}% × (Item Cost + Int'l Shipping in Ks)`;
+      : `${f.agentPct||0}% × discounted Item Cost in Ks (all units; shipping excluded)`;
     const markupHint = f.marginMode==='flat'
       ? `Landed Cost + ${fmtMMK(f.marginFlatMMK)} fixed profit`
       : `Landed Cost × (1 + ${f.marginPct||0}%)`;
@@ -1228,16 +1331,20 @@ function renderPricing(panel){
       <div class="line-wrap"><div class="line total"><span>Landed Cost (per unit)</span><span class="v">${fmtMMK(perUnitLanded)}</span></div>
         <div class="formula-hint">(${fmtMMK(r.itemMMK)} + ${fmtMMK(r.intlMMK)} + ${fmtMMK(r.agentMMK)} + ${fmtMMK(r.domMMK)} + ${fmtMMK(r.lastMMK)}) ÷ ${f.qty||1} qty</div></div>
       <div class="line-wrap"><div class="line total"><span>Suggested Price</span><span class="v">${fmtMMK(suggested)}</span></div>
-        <div class="formula-hint">${markupHint} = ${fmtMMK(suggested)}</div></div>
+        <div class="formula-hint">${markupHint}; rounded up to ${document.getElementById('calc_rounding').value} Ks = ${fmtMMK(suggested)}</div></div>
       <div class="line-wrap"><div class="line"><span>Actual Sale Price</span><span class="v">${fmtMMK(actual)}</span></div>
         <div class="formula-hint">${CALC_ACTUAL_TOUCHED ? 'Set by you — no longer follows Suggested Price' : 'Following Suggested Price (edit above to override)'}</div></div>
       <div class="line-wrap"><div class="line"><span>Profit / Unit (Actual − Landed)</span><span class="v ${profitCls}">${profitSign}${fmtMMK(Math.abs(profit))}</span></div>
-        <div class="formula-hint">${fmtMMK(actual)} − ${fmtMMK(perUnitLanded)} landed = ${profitSign}${fmtMMK(Math.abs(profit))}</div></div>
+        <div class="formula-hint">${fmtMMK(actual)} − ${fmtMMK(perUnitLanded)} landed = ${profitSign}${fmtMMK(Math.abs(profit))}. Profit margin: ${actual>0 ? (profit/actual*100).toFixed(1)+'% of sale price' : '—'}. Markup is measured against cost.</div></div>
     `;
+    saveCalculatorDraft();
     clearTimeout(CALC_REMEMBER_TIMER);
     CALC_REMEMBER_TIMER = setTimeout(()=> rememberLastUsed(f, null), 600); // wait for a pause in typing instead of writing on every keystroke
     return {perUnitLanded, suggested, actual};
   };
+  panel.addEventListener('input', saveCalculatorDraft);
+  panel.addEventListener('change', saveCalculatorDraft);
+  document.getElementById('calc_rounding').addEventListener('change', calc);
   wireCostForm('calc', calc);
   calc();
   document.getElementById('calc_actual').addEventListener('input', ()=>{ CALC_ACTUAL_TOUCHED = true; calc(); });
@@ -1245,7 +1352,7 @@ function renderPricing(panel){
   document.getElementById('calc_saveProd').addEventListener('click', async ()=>{
     const name = document.getElementById('calc_name').value.trim();
     if(!name){ toast('Give the product a name first'); return; }
-    const f = readCostForm('calc'); const res = calc();
+    const f = readCostForm('calc'); const res = calc(); if(!f || !res) return;
     f.ratesSnapshot = Object.assign({}, STATE.settings.rates);
     f.pricedAt = new Date().toISOString().slice(0,10);
     const product = { id:uid(), code: document.getElementById('calc_code').value.trim(), name, category:'', notes:'',
@@ -1347,17 +1454,19 @@ function renderSettings(panel){
     <div class="row" style="margin-top:16px;"><button class="btn stamp" id="s_save">Save Settings</button></div>
   `;
   document.getElementById('s_save').addEventListener('click', async ()=>{
+    if(!validateNumericFields(['s_margin', ...CURRENCIES.filter(c=>c!=='MMK').map(c=>'rate_'+c)])) return;
     const rates = {MMK:1};
-    CURRENCIES.filter(c=>c!=='MMK').forEach(c=>{ rates[c] = parseFloat(document.getElementById('rate_'+c).value)||STATE.settings.rates[c]; });
+    CURRENCIES.filter(c=>c!=='MMK').forEach(c=>{ rates[c] = Number(document.getElementById('rate_'+c).value); });
     STATE.settings = Object.assign({}, STATE.settings, { businessName: document.getElementById('s_name').value.trim()||'My Shop',
-      marginPct: parseFloat(document.getElementById('s_margin').value)||25, rates });
+      marginPct: Number(document.getElementById('s_margin').value), rates });
     await sSet('settings', STATE.settings); toast('Settings saved'); render();
   });
   document.getElementById('cr_add').addEventListener('click', async ()=>{
+    if(!validateNumericFields(['cr_amt'])) return;
     const name = document.getElementById('cr_name').value.trim();
     const amount = parseFloat(document.getElementById('cr_amt').value)||0;
     const currency = document.getElementById('cr_cur').value;
-    if(!name || !amount){ toast('Give the rate a name and amount'); return; }
+    if(!name || amount<=0){ toast('Give the rate a name and amount'); return; }
     STATE.settings.cargoRates = (STATE.settings.cargoRates||[]).concat([{ id:uid(), name, amount, currency }]);
     await sSet('settings', STATE.settings); toast('Cargo rate saved'); renderSettings(document.getElementById('panel'));
   });
